@@ -1,0 +1,2157 @@
+"use client";
+
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import Modal from "@/components/Modal";
+import { 
+  HardDrive, Folder, Trash2, Upload, RefreshCw, 
+  Wifi, ChevronRight, Home, Search,
+  FileText, Image as ImageIcon, Music, Video, Edit2,
+  FileArchive, FileCode, FileSpreadsheet, FileType, FileJson,
+  LogOut, ShieldCheck, Eye, EyeOff,
+  LayoutGrid, List as ListIcon, Download, Link2, Copy, ArrowRightLeft, FolderOpen, Settings, X,
+  Pause, Play, CircleX,
+  Globe, BadgeInfo, Mail, BookOpen,
+} from "lucide-react";
+
+// --- 类型定义 ---
+type Bucket = { Name: string; CreationDate: string };
+type FileItem = {
+  name: string;
+  key: string;
+  type: "folder" | "file";
+  size?: number;
+  lastModified?: string;
+};
+type Credentials = {
+  accountId: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+};
+type BucketUsage = {
+  bucket: string;
+  prefix: string;
+  objects: number;
+  bytes: number;
+  pagesScanned: number;
+  truncated: boolean;
+};
+type AccountUsage = {
+  buckets: number;
+  objects: number;
+  bytes: number;
+  truncatedBuckets: number;
+};
+type LinkConfig = {
+  publicBaseUrl?: string;
+  customBaseUrl?: string;
+};
+type LinkConfigMap = Record<string, LinkConfig>;
+type PreviewState =
+  | null
+  | {
+      name: string;
+      key: string;
+      bucket: string;
+      kind: "image" | "video" | "audio" | "text" | "pdf" | "office" | "other";
+      url: string;
+      text?: string;
+    };
+type PreviewKind = NonNullable<PreviewState>["kind"];
+
+type UploadStatus = "queued" | "uploading" | "paused" | "done" | "error" | "canceled";
+type UploadTask = {
+  id: string;
+  bucket: string;
+  file: File;
+  key: string;
+  startedAt?: number;
+  loaded: number;
+  speedBps: number;
+  status: UploadStatus;
+  error?: string;
+};
+
+// --- 辅助函数 ---
+const formatSize = (bytes?: number) => {
+  if (bytes === undefined) return "-";
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+};
+
+const LOGIN_PAGE = {
+  title: "Qing's R2 Admin",
+  subtitle: "连接到您的 Cloudflare R2 存储",
+  advantages: [
+    "极速的响应速度和上传下载速度",
+    "无服务器部署、不存储用户数据",
+    "支持大文件分片上传、预览、批量操作等功能",
+  ],
+  announcementTitle: "公告",
+  announcementText: `欢迎使用
+
+- 继续访问即代表您已阅读并同意「关于页面」相关条款。
+- 如有问题欢迎通过「电子邮件」与我反馈沟通。
+`,
+  footer: "By Wang Qing",
+};
+
+const LOGIN_LINKS = [
+  { label: "我的博客", href: "https://qinghub.top", icon: "globe" as const },
+  { label: "使用教程", href: "https://github.com/wangqing176176-a11y/qing-r2-cloudy", icon: "book" as const },
+  { label: "关于页面", href: "https://qinghub.top/about/", icon: "about" as const },
+  { label: "电子邮箱", href: "mailto:wangqing176176@gmail.com", icon: "mail" as const },
+] as const;
+
+export default function R2Admin() {
+  // --- 状态管理 ---
+  const [credentials, setCredentials] = useState<Credentials | null>(null);
+  const [buckets, setBuckets] = useState<Bucket[]>([]);
+  const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
+  const [files, setFiles] = useState<FileItem[]>([]);
+  const [path, setPath] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<"checking" | "connected" | "error">("checking");
+  const [bucketUsage, setBucketUsage] = useState<BucketUsage | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [accountUsage, setAccountUsage] = useState<AccountUsage | null>(null);
+  const [accountUsageLoading, setAccountUsageLoading] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<FileItem | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [preview, setPreview] = useState<PreviewState>(null);
+  const [uploadPanelOpen, setUploadPanelOpen] = useState(false);
+  const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
+  const [uploadQueuePaused, setUploadQueuePaused] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [linkConfigMap, setLinkConfigMap] = useState<LinkConfigMap>({});
+
+  const [toast, setToast] = useState<string | null>(null);
+
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveMode, setMoveMode] = useState<"move" | "copy">("move");
+  const [moveTarget, setMoveTarget] = useState("");
+
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkPublic, setLinkPublic] = useState("");
+  const [linkCustom, setLinkCustom] = useState("");
+
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const uploadTasksRef = useRef<UploadTask[]>([]);
+  const uploadProcessingRef = useRef(false);
+  const uploadControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const uploadQueuePausedRef = useRef(false);
+
+  useEffect(() => {
+    uploadTasksRef.current = uploadTasks;
+  }, [uploadTasks]);
+
+  useEffect(() => {
+    uploadQueuePausedRef.current = uploadQueuePaused;
+  }, [uploadQueuePaused]);
+
+  // 登录表单状态
+  const [formAccountId, setFormAccountId] = useState("");
+  const [formAccessKeyId, setFormAccessKeyId] = useState("");
+  const [formSecretAccessKey, setFormSecretAccessKey] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
+
+  // --- 初始化 ---
+  useEffect(() => {
+    const stored = localStorage.getItem("r2_credentials");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        setCredentials(parsed);
+      } catch {
+        localStorage.removeItem("r2_credentials");
+      }
+    }
+    const storedLinks = localStorage.getItem("r2_link_config_v1");
+    if (storedLinks) {
+      try {
+        setLinkConfigMap(JSON.parse(storedLinks));
+      } catch {
+        localStorage.removeItem("r2_link_config_v1");
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 1800);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  useEffect(() => {
+    if (credentials) {
+      fetchBuckets();
+    }
+  }, [credentials]);
+
+  // --- 核心：带鉴权的 Fetch ---
+  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+    if (!credentials) throw new Error("No credentials");
+    
+    const headers = {
+      ...options.headers,
+      "x-r2-account-id": credentials.accountId,
+      "x-r2-access-key-id": credentials.accessKeyId,
+      "x-r2-secret-access-key": credentials.secretAccessKey,
+    };
+
+    return fetch(url, { ...options, headers });
+  };
+
+  // --- 登录逻辑 ---
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formAccountId || !formAccessKeyId || !formSecretAccessKey) {
+      setToast("请填写所有字段");
+      return;
+    }
+    const creds = {
+      accountId: formAccountId,
+      accessKeyId: formAccessKeyId,
+      secretAccessKey: formSecretAccessKey
+    };
+    setCredentials(creds);
+    if (rememberMe) {
+      localStorage.setItem("r2_credentials", JSON.stringify(creds));
+    }
+  };
+
+  const handleLogout = () => {
+    setCredentials(null);
+    setBuckets([]);
+    setSelectedBucket(null);
+    setBucketUsage(null);
+    setAccountUsage(null);
+    setSelectedItem(null);
+    setSelectedKeys(new Set());
+    setPreview(null);
+    setUploadTasks([]);
+    setUploadPanelOpen(false);
+    setUploadQueuePaused(false);
+    setRenameOpen(false);
+    setMoveOpen(false);
+    setLinkOpen(false);
+    setDeleteOpen(false);
+    localStorage.removeItem("r2_credentials");
+  };
+
+  // --- API 调用 ---
+  const fetchBuckets = async () => {
+    setConnectionStatus("checking");
+    try {
+      const res = await fetchWithAuth("/api/buckets");
+      const data = await res.json();
+      if (res.ok && data.buckets) {
+        setBuckets(data.buckets);
+        setConnectionStatus("connected");
+        if (data.buckets.length > 0 && !selectedBucket) {
+          setSelectedBucket(data.buckets[0].Name);
+        }
+      } else {
+        setConnectionStatus("error");
+        if (data.error) setToast(`连接失败: ${data.error}`);
+      }
+    } catch (e) {
+      setConnectionStatus("error");
+      console.error(e);
+    }
+  };
+
+  const fetchFiles = async (bucketName: string, currentPath: string[]) => {
+    if (!bucketName) return;
+    setLoading(true);
+    const prefix = currentPath.length > 0 ? currentPath.join("/") + "/" : "";
+    try {
+      const res = await fetchWithAuth(`/api/files?bucket=${bucketName}&prefix=${encodeURIComponent(prefix)}`);
+      const data = await res.json();
+      setFiles(data.items || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchBucketUsage = async (bucketName: string) => {
+    setUsageLoading(true);
+    try {
+      const res = await fetchWithAuth(`/api/usage?bucket=${encodeURIComponent(bucketName)}&maxPages=10`);
+      const data = await res.json();
+      if (res.ok) setBucketUsage(data);
+      else setBucketUsage(null);
+    } catch {
+      setBucketUsage(null);
+    } finally {
+      setUsageLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedBucket && credentials) {
+      fetchFiles(selectedBucket, path);
+      setSelectedItem(null);
+      setSelectedKeys(new Set());
+    }
+  }, [selectedBucket, path, credentials]);
+
+  useEffect(() => {
+    if (selectedBucket && credentials) {
+      fetchBucketUsage(selectedBucket);
+    }
+  }, [selectedBucket, credentials]);
+
+  const fetchAccountUsageTotal = async (bucketList: Bucket[]) => {
+    if (!bucketList.length) {
+      setAccountUsage(null);
+      return;
+    }
+    setAccountUsageLoading(true);
+    try {
+      let objects = 0;
+      let bytes = 0;
+      let truncatedBuckets = 0;
+
+      const concurrency = 2;
+      let index = 0;
+      const worker = async () => {
+        for (;;) {
+          const i = index++;
+          if (i >= bucketList.length) break;
+          const name = bucketList[i].Name;
+          const res = await fetchWithAuth(`/api/usage?bucket=${encodeURIComponent(name)}&maxPages=10`);
+          const data = await res.json();
+          if (res.ok) {
+            objects += data.objects ?? 0;
+            bytes += data.bytes ?? 0;
+            if (data.truncated) truncatedBuckets += 1;
+          }
+        }
+      };
+
+      await Promise.all(Array.from({ length: Math.min(concurrency, bucketList.length) }, worker));
+      setAccountUsage({ buckets: bucketList.length, objects, bytes, truncatedBuckets });
+    } catch {
+      setAccountUsage(null);
+    } finally {
+      setAccountUsageLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (credentials && buckets.length) {
+      fetchAccountUsageTotal(buckets);
+    } else {
+      setAccountUsage(null);
+    }
+  }, [credentials, buckets]);
+
+  const persistLinkConfigMap = (next: LinkConfigMap) => {
+    setLinkConfigMap(next);
+    localStorage.setItem("r2_link_config_v1", JSON.stringify(next));
+  };
+
+  const getLinkConfig = (bucketName: string | null): LinkConfig => {
+    if (!bucketName) return {};
+    return linkConfigMap[bucketName] ?? {};
+  };
+
+  const normalizeBaseUrl = (raw?: string) => {
+    if (!raw) return undefined;
+    const trimmed = raw.trim();
+    if (!trimmed) return undefined;
+    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    return withProto.endsWith("/") ? withProto : `${withProto}/`;
+  };
+
+  const buildObjectUrl = (baseUrl: string | undefined, key: string) => {
+    if (!baseUrl) return null;
+    return baseUrl + key.split("/").map(encodeURIComponent).join("/");
+  };
+
+  const getFileExt = (name: string) => {
+    const base = name.split("?")[0];
+    const parts = base.split("/");
+    const last = parts[parts.length - 1] || "";
+    const idx = last.lastIndexOf(".");
+    if (idx <= 0 || idx === last.length - 1) return "";
+    return last.slice(idx + 1).toLowerCase();
+  };
+
+  const getFileTag = (item: FileItem) => {
+    if (item.type === "folder") return "DIR";
+    const ext = getFileExt(item.name);
+    return ext ? ext.toUpperCase() : "FILE";
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setToast("已复制到剪贴板");
+  };
+
+  // --- 操作逻辑 ---
+  const handleEnterFolder = (folderName: string) => {
+    setPath([...path, folderName]);
+    setSearchTerm("");
+  };
+
+  const handleBreadcrumbClick = (index: number) => {
+    setPath(path.slice(0, index + 1));
+  };
+
+  const handleDelete = () => {
+    if (!selectedBucket || !selectedItem) return;
+    setDeleteOpen(true);
+  };
+
+  const executeDelete = async () => {
+    if (!selectedBucket || !selectedItem) return;
+    try {
+      setLoading(true);
+      if (selectedItem.type === "folder") {
+        const res = await fetchWithAuth("/api/operate", {
+          method: "POST",
+          body: JSON.stringify({
+            bucket: selectedBucket,
+            sourceKey: selectedItem.key,
+            operation: "delete",
+          }),
+        });
+        if (!res.ok) throw new Error("delete failed");
+      } else {
+        const res = await fetchWithAuth(
+          `/api/files?bucket=${selectedBucket}&key=${encodeURIComponent(selectedItem.key)}`,
+          { method: "DELETE" },
+        );
+        if (!res.ok) throw new Error("delete failed");
+      }
+
+      setDeleteOpen(false);
+      fetchFiles(selectedBucket, path);
+      setSelectedItem(null);
+      setSelectedKeys(new Set());
+      setToast("已删除");
+    } catch {
+      setToast("删除失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRename = () => {
+    if (!selectedBucket || !selectedItem) return;
+    setRenameValue(selectedItem.name);
+    setRenameOpen(true);
+  };
+
+  const executeRename = async () => {
+    if (!selectedBucket || !selectedItem) return;
+    const newName = renameValue.trim();
+    if (!newName || newName === selectedItem.name) {
+      setRenameOpen(false);
+      return;
+    }
+
+    const prefix = path.length > 0 ? path.join("/") + "/" : "";
+    const targetKey = prefix + newName + (selectedItem.type === "folder" ? "/" : "");
+
+    try {
+      setLoading(true);
+      const res = await fetchWithAuth("/api/operate", {
+        method: "POST",
+        body: JSON.stringify({
+          bucket: selectedBucket,
+          sourceKey: selectedItem.key,
+          targetKey,
+          operation: "move",
+        }),
+      });
+      if (!res.ok) throw new Error("rename failed");
+      setRenameOpen(false);
+      fetchFiles(selectedBucket, path);
+      setSelectedItem(null);
+      setSelectedKeys(new Set());
+      setToast("已重命名");
+    } catch {
+      setToast("重命名失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMoveOrCopy = (mode: "move" | "copy") => {
+    if (!selectedBucket || !selectedItem) return;
+    setMoveMode(mode);
+    const defaultDest = path.length ? path.join("/") + "/" : "";
+    setMoveTarget(defaultDest);
+    setMoveOpen(true);
+  };
+
+  const executeMoveOrCopy = async () => {
+    if (!selectedBucket || !selectedItem) return;
+    const input = moveTarget.trim();
+    if (!input) {
+      setMoveOpen(false);
+      return;
+    }
+
+    let cleaned = input;
+    if (cleaned.startsWith("/")) cleaned = cleaned.slice(1);
+
+    const suffix = selectedItem.type === "folder" ? "/" : "";
+    let targetKey = cleaned;
+    if (cleaned.endsWith("/")) {
+      targetKey = cleaned + selectedItem.name + suffix;
+    } else {
+      if (selectedItem.type === "folder" && !targetKey.endsWith("/")) targetKey += "/";
+    }
+
+    try {
+      setLoading(true);
+      const res = await fetchWithAuth("/api/operate", {
+        method: "POST",
+        body: JSON.stringify({
+          bucket: selectedBucket,
+          sourceKey: selectedItem.key,
+          targetKey,
+          operation: moveMode,
+        }),
+      });
+      if (!res.ok) throw new Error("operate failed");
+      setMoveOpen(false);
+      fetchFiles(selectedBucket, path);
+      setSelectedItem(null);
+      setSelectedKeys(new Set());
+      setToast(moveMode === "move" ? "已移动" : "已复制");
+    } catch {
+      setToast(moveMode === "move" ? "移动失败" : "复制失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getSignedDownloadUrl = async (bucket: string, key: string) => {
+    const res = await fetchWithAuth(`/api/download?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`);
+    const data = await res.json();
+    if (!res.ok || !data.url) throw new Error(data.error || "download url failed");
+    return data.url as string;
+  };
+
+  const getSignedDownloadUrlForced = async (bucket: string, key: string, filename: string) => {
+    const res = await fetchWithAuth(
+      `/api/download?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}&download=1&filename=${encodeURIComponent(filename)}`,
+    );
+    const data = await res.json();
+    if (!res.ok || !data.url) throw new Error(data.error || "download url failed");
+    return data.url as string;
+  };
+
+  const downloadItem = async (item: FileItem) => {
+    if (!selectedBucket) return;
+    if (item.type === "folder") {
+      setToast("文件夹打包下载下一步做（当前先支持文件下载）");
+      return;
+    }
+    try {
+      const url = await getSignedDownloadUrlForced(selectedBucket, item.key, item.name);
+      triggerDownloadUrl(url, item.name);
+      setToast("已拉起下载");
+    } catch {
+      setToast("下载失败");
+    }
+  };
+
+  const triggerDownloadUrl = (url: string, filename: string) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleBatchDownload = async () => {
+    if (!selectedBucket) return;
+    const keys = Array.from(selectedKeys).filter((k) => !k.endsWith("/"));
+    if (!keys.length) {
+      setToast("请先勾选要下载的文件（文件夹暂不支持批量下载）");
+      return;
+    }
+    setToast(`开始下载 ${keys.length} 个文件`);
+    for (const k of keys) {
+      try {
+        const filename = k.split("/").pop() || "download";
+        const url = await getSignedDownloadUrlForced(selectedBucket, k, filename);
+        triggerDownloadUrl(url, filename);
+        await new Promise((r) => setTimeout(r, 150));
+      } catch {
+        // ignore and continue
+      }
+    }
+    setToast("已拉起批量下载");
+  };
+
+  const handleConfigureLinks = () => {
+    if (!selectedBucket) return;
+    const current = getLinkConfig(selectedBucket);
+    setLinkPublic(current.publicBaseUrl ?? "");
+    setLinkCustom(current.customBaseUrl ?? "");
+    setLinkOpen(true);
+  };
+
+  const saveLinkConfig = () => {
+    if (!selectedBucket) return;
+    const publicBaseUrl = normalizeBaseUrl(linkPublic || undefined);
+    const customBaseUrl = normalizeBaseUrl(linkCustom || undefined);
+    const next: LinkConfigMap = { ...linkConfigMap, [selectedBucket]: { publicBaseUrl, customBaseUrl } };
+    persistLinkConfigMap(next);
+    setLinkOpen(false);
+    setToast("已保存链接设置");
+  };
+
+  const copyLinkForItem = async (item: FileItem, kind: "public" | "custom") => {
+    if (!selectedBucket) return;
+    const cfg = getLinkConfig(selectedBucket);
+    const baseUrl = kind === "public" ? cfg.publicBaseUrl : cfg.customBaseUrl;
+    const url = buildObjectUrl(baseUrl, item.key);
+    if (!url) {
+      setToast(kind === "public" ? "未配置公共开发 URL" : "未配置自定义域名");
+      return;
+    }
+    await copyToClipboard(url);
+  };
+
+  const previewItem = async (item: FileItem) => {
+    if (!selectedBucket) return;
+    if (item.type === "folder") return;
+
+	    const lower = item.name.toLowerCase();
+	    const ext = getFileExt(item.name);
+	    let kind: PreviewKind = "other";
+	    if (ext === "pdf") kind = "pdf";
+	    else if (/^(doc|docx|ppt|pptx|xls|xlsx)$/.test(ext)) kind = "office";
+	    else if (/\.(png|jpg|jpeg|gif|webp|svg)$/.test(lower)) kind = "image";
+	    else if (/\.(mp4|mov|mkv|webm)$/.test(lower)) kind = "video";
+	    else if (/\.(mp3|wav|flac|ogg)$/.test(lower)) kind = "audio";
+	    else if (/\.(txt|log|md|json|csv|ts|tsx|js|jsx|css|html|xml|yml|yaml)$/.test(lower)) kind = "text";
+
+    try {
+      const url = await getSignedDownloadUrl(selectedBucket, item.key);
+      const next: PreviewState = { name: item.name, key: item.key, bucket: selectedBucket, kind, url };
+      setPreview(next);
+      if (kind === "text") {
+        const res = await fetch(url, { headers: { Range: "bytes=0-204799" } });
+        const text = await res.text();
+        setPreview((prev) => (prev && prev.key === item.key ? { ...prev, text } : prev));
+      }
+    } catch {
+      setToast("预览失败");
+    }
+  };
+
+  const formatSpeed = (bytesPerSec: number) => {
+    if (!Number.isFinite(bytesPerSec) || bytesPerSec <= 0) return "-";
+    return `${formatSize(bytesPerSec)}/s`;
+  };
+
+  const xhrPut = (
+    url: string,
+    body: Blob,
+    contentType: string | undefined,
+    onProgress: (loaded: number, total: number) => void,
+    signal?: AbortSignal,
+  ) => {
+    return new Promise<{ etag: string | null }>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", url, true);
+      xhr.setRequestHeader("Content-Type", contentType || "application/octet-stream");
+
+      if (signal) {
+        if (signal.aborted) {
+          reject(new Error("Aborted"));
+          return;
+        }
+        const onAbort = () => {
+          try {
+            xhr.abort();
+          } catch {
+            // ignore
+          }
+        };
+        signal.addEventListener("abort", onAbort, { once: true });
+        xhr.addEventListener(
+          "loadend",
+          () => {
+            signal.removeEventListener("abort", onAbort);
+          },
+          { once: true },
+        );
+      }
+
+      xhr.upload.onprogress = (evt) => {
+        if (evt.lengthComputable) onProgress(evt.loaded, evt.total);
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve({ etag: xhr.getResponseHeader("ETag") });
+        } else {
+          reject(new Error(`Upload failed: ${xhr.status}`));
+        }
+      };
+      xhr.onerror = () => reject(new Error("Network error"));
+      xhr.onabort = () => reject(new Error("Aborted"));
+      xhr.send(body);
+    });
+  };
+
+  const uploadSingleFile = async (
+    bucket: string,
+    key: string,
+    file: File,
+    onLoaded: (loaded: number) => void,
+    signal?: AbortSignal,
+  ) => {
+    const signRes = await fetchWithAuth("/api/files", {
+      method: "POST",
+      body: JSON.stringify({ bucket, key, contentType: file.type }),
+    });
+    const signData = await signRes.json();
+    if (!signRes.ok || !signData.url) throw new Error(signData.error || "sign failed");
+    await xhrPut(signData.url, file, file.type, (loaded) => onLoaded(loaded), signal);
+  };
+
+  const uploadMultipartFile = async (
+    bucket: string,
+    key: string,
+    file: File,
+    onLoaded: (loaded: number) => void,
+    signal?: AbortSignal,
+  ) => {
+    const createRes = await fetchWithAuth("/api/multipart", {
+      method: "POST",
+      body: JSON.stringify({ action: "create", bucket, key, contentType: file.type }),
+    });
+    const createData = await createRes.json();
+    if (!createRes.ok || !createData.uploadId) throw new Error(createData.error || "create multipart failed");
+    const uploadId = createData.uploadId as string;
+
+    const partSize = 10 * 1024 * 1024;
+    const partCount = Math.ceil(file.size / partSize);
+    const partLoaded = new Map<number, number>();
+    const parts: Array<{ etag: string; partNumber: number }> = [];
+
+    const concurrency = 3;
+    let nextPart = 1;
+    let aborted = false;
+
+    const uploadPart = async (partNumber: number) => {
+      const start = (partNumber - 1) * partSize;
+      const end = Math.min(file.size, start + partSize);
+      const blob = file.slice(start, end);
+
+      const signRes = await fetchWithAuth("/api/multipart", {
+        method: "POST",
+        body: JSON.stringify({ action: "signPart", bucket, key, uploadId, partNumber }),
+      });
+      const signData = await signRes.json();
+      if (!signRes.ok || !signData.url) throw new Error(signData.error || "sign part failed");
+
+      const { etag } = await xhrPut(signData.url, blob, file.type, (loaded, total) => {
+        partLoaded.set(partNumber, loaded);
+        const sumLoaded = Array.from(partLoaded.values()).reduce((a, b) => a + b, 0);
+        onLoaded(sumLoaded);
+        if (loaded === total) partLoaded.set(partNumber, total);
+      }, signal);
+      if (!etag) throw new Error("Missing ETag");
+      parts.push({ etag, partNumber });
+    };
+
+    const worker = async () => {
+      for (;;) {
+        if (aborted) return;
+        const partNumber = nextPart++;
+        if (partNumber > partCount) return;
+        await uploadPart(partNumber);
+      }
+    };
+
+    try {
+      await Promise.all(Array.from({ length: Math.min(concurrency, partCount) }, worker));
+      parts.sort((a, b) => a.partNumber - b.partNumber);
+      const completeRes = await fetchWithAuth("/api/multipart", {
+        method: "POST",
+        body: JSON.stringify({ action: "complete", bucket, key, uploadId, parts }),
+      });
+      const completeData = await completeRes.json();
+      if (!completeRes.ok) throw new Error(completeData.error || "complete failed");
+    } catch (err) {
+      aborted = true;
+      await fetchWithAuth("/api/multipart", {
+        method: "POST",
+        body: JSON.stringify({ action: "abort", bucket, key, uploadId }),
+      }).catch(() => {});
+      throw err;
+    }
+  };
+
+  const updateUploadTask = (id: string, updater: (t: UploadTask) => UploadTask) => {
+    setUploadTasks((prev) => prev.map((t) => (t.id === id ? updater(t) : t)));
+  };
+
+  const pauseUploadTask = (id: string) => {
+    setUploadTasks((prev) =>
+      prev.map((t) => (t.id === id && t.status === "uploading" ? { ...t, status: "paused", speedBps: 0 } : t)),
+    );
+    setUploadQueuePaused(true);
+    uploadControllersRef.current.get(id)?.abort();
+    setToast("已暂停（再次开始将重新上传）");
+  };
+
+  const resumeUploadTask = (id: string) => {
+    setUploadTasks((prev) =>
+      prev.map((t) =>
+        t.id === id && (t.status === "paused" || t.status === "error")
+          ? { ...t, status: "queued", loaded: 0, speedBps: 0, startedAt: undefined, error: undefined }
+          : t,
+      ),
+    );
+    setUploadQueuePaused(false);
+    setTimeout(() => processUploadQueue(), 0);
+  };
+
+  const cancelUploadTask = (id: string) => {
+    setUploadTasks((prev) =>
+      prev.map((t) => (t.id === id && (t.status === "queued" || t.status === "uploading" || t.status === "paused") ? { ...t, status: "canceled", speedBps: 0 } : t)),
+    );
+    uploadControllersRef.current.get(id)?.abort();
+    setToast("已取消");
+  };
+
+  const processUploadQueue = async () => {
+    if (uploadProcessingRef.current) return;
+    if (uploadQueuePausedRef.current) return;
+    uploadProcessingRef.current = true;
+    try {
+      for (;;) {
+        if (uploadQueuePausedRef.current) break;
+        const next = uploadTasksRef.current.find((t) => t.status === "queued");
+        if (!next) break;
+
+        const controller = new AbortController();
+        uploadControllersRef.current.set(next.id, controller);
+
+        updateUploadTask(next.id, (t) => ({
+          ...t,
+          status: "uploading",
+          startedAt: performance.now(),
+          loaded: 0,
+          speedBps: 0,
+          error: undefined,
+        }));
+
+        const threshold = 100 * 1024 * 1024;
+        const uploadFn = next.file.size >= threshold ? uploadMultipartFile : uploadSingleFile;
+
+        let lastAt = performance.now();
+        let lastLoaded = 0;
+
+        try {
+          await uploadFn(next.bucket, next.key, next.file, (loaded) => {
+            const now = performance.now();
+            const deltaBytes = Math.max(0, loaded - lastLoaded);
+            const deltaSec = Math.max(0.25, (now - lastAt) / 1000);
+            const speedBps = deltaBytes / deltaSec;
+            lastAt = now;
+            lastLoaded = loaded;
+
+            updateUploadTask(next.id, (t) => ({
+              ...t,
+              loaded,
+              speedBps: Number.isFinite(speedBps) ? speedBps : 0,
+            }));
+          }, controller.signal);
+
+          updateUploadTask(next.id, (t) => ({ ...t, status: "done", loaded: t.file.size, speedBps: 0 }));
+          if (selectedBucket === next.bucket) fetchFiles(next.bucket, path);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const current = uploadTasksRef.current.find((t) => t.id === next.id);
+          if (current?.status === "paused" || current?.status === "canceled") {
+            // keep status
+          } else {
+            updateUploadTask(next.id, (t) => ({ ...t, status: "error", error: message, speedBps: 0 }));
+          }
+        } finally {
+          uploadControllersRef.current.delete(next.id);
+        }
+      }
+    } finally {
+      uploadProcessingRef.current = false;
+    }
+  };
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !selectedBucket) return;
+    const filesToUpload = Array.from(e.target.files);
+    const prefix = path.length > 0 ? path.join("/") + "/" : "";
+
+    const newTasks: UploadTask[] = filesToUpload.map((file) => ({
+      id: (globalThis.crypto?.randomUUID?.() as string | undefined) ?? `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+      bucket: selectedBucket,
+      file,
+      key: prefix + file.name,
+      loaded: 0,
+      speedBps: 0,
+      status: "queued",
+    }));
+
+    setUploadTasks((prev) => [...newTasks, ...prev].slice(0, 50));
+    setUploadPanelOpen(true);
+    setToast(`已加入 ${newTasks.length} 个上传任务`);
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setTimeout(() => processUploadQueue(), 0);
+  };
+
+  // --- 视图数据处理 ---
+  const filteredFiles = useMemo(() => {
+    if (!searchTerm) return files;
+    return files.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  }, [files, searchTerm]);
+
+  const uploadSummary = useMemo(() => {
+    const totalBytes = uploadTasks.reduce((acc, t) => acc + t.file.size, 0);
+    const loadedBytes = uploadTasks.reduce((acc, t) => acc + Math.min(t.loaded, t.file.size), 0);
+    const active = uploadTasks.filter((t) => t.status === "queued" || t.status === "uploading").length;
+    const speedBps = uploadTasks.reduce((acc, t) => acc + (t.status === "uploading" ? t.speedBps : 0), 0);
+    const pct = totalBytes ? Math.min(100, Math.round((loadedBytes / totalBytes) * 100)) : 0;
+    return {
+      active,
+      total: uploadTasks.length,
+      pct,
+      speedText: formatSpeed(speedBps),
+    };
+  }, [uploadTasks]);
+
+  const currentViewStats = useMemo(() => {
+    const fileCount = files.filter(f => f.type === "file").length;
+    const folderCount = files.filter(f => f.type === "folder").length;
+    const totalSize = files.reduce((acc, curr) => acc + (curr.size || 0), 0);
+    return { fileCount, folderCount, totalSize };
+  }, [files]);
+
+  const getIcon = (type: string, name: string, size: "lg" | "sm" = "lg") => {
+    const cls = size === "lg" ? "w-8 h-8" : "w-5 h-5";
+    if (type === "folder") return <Folder className={`${cls} text-yellow-500 ${size === "lg" ? "fill-yellow-500/20" : ""}`} />;
+    const lower = name.toLowerCase();
+    const ext = getFileExt(name);
+    if (/\.(jpg|png|gif|webp|svg)$/.test(lower)) return <ImageIcon className={`${cls} text-purple-500`} />;
+    if (/\.(mp4|mov|mkv|webm)$/.test(lower)) return <Video className={`${cls} text-red-500`} />;
+    if (/\.(mp3|wav|flac|ogg)$/.test(lower)) return <Music className={`${cls} text-blue-500`} />;
+    if (/(zip|rar|7z|tar|gz|bz2|xz)$/.test(ext)) return <FileArchive className={`${cls} text-amber-600`} />;
+    if (/(xls|xlsx|csv)$/.test(ext)) return <FileSpreadsheet className={`${cls} text-emerald-600`} />;
+    if (ext === "json") return <FileJson className={`${cls} text-orange-600`} />;
+    if (ext === "pdf") return <FileType className={`${cls} text-rose-600`} />;
+    if (/(doc|docx|ppt|pptx)$/.test(ext)) return <FileType className={`${cls} text-sky-600`} />;
+    if (/(apk|ipa|dmg|pkg|exe|msi|deb|rpm)$/.test(ext)) return <FileType className={`${cls} text-slate-600`} />;
+    if (/(ts|tsx|js|jsx|css|html|xml|yml|yaml|md|txt|log|sh|bash|py|go|rs|java|kt|c|cpp|h|hpp)$/.test(ext))
+      return <FileCode className={`${cls} text-indigo-600`} />;
+    return <FileText className={`${cls} text-gray-400`} />;
+  };
+
+  // --- 渲染：登录界面 ---
+  if (!credentials) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 flex items-center justify-center p-6 font-sans">
+        <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+          {/* 左侧：公告与说明 */}
+          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col">
+            <div className="px-8 py-7 h-[168px] bg-gradient-to-br from-indigo-600 to-blue-600 text-white flex items-center">
+              <div className="w-full">
+                <div className="text-sm font-medium text-white/85">{LOGIN_PAGE.title}</div>
+                <h1 className="mt-2 text-3xl font-semibold tracking-tight">公告与说明</h1>
+                <p className="mt-2 text-white/80">{LOGIN_PAGE.subtitle}</p>
+              </div>
+            </div>
+
+            <div className="px-8 py-7 flex flex-col gap-6 grow">
+              <div>
+                <div className="text-xs font-semibold tracking-wide text-gray-500">平台优势</div>
+                <ul className="mt-3 space-y-2 text-sm text-gray-800">
+                  {LOGIN_PAGE.advantages.map((t) => (
+                    <li key={t} className="flex gap-3">
+                      <span className="mt-2 h-1.5 w-1.5 rounded-full bg-blue-600 flex-none" />
+                      <span className="leading-relaxed">{t}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div>
+                <div className="text-xs font-semibold tracking-wide text-gray-500">{LOGIN_PAGE.announcementTitle}</div>
+                <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                  {LOGIN_PAGE.announcementText}
+                </div>
+
+              </div>
+
+              <div className="mt-auto">
+                <div className="text-xs font-semibold tracking-wide text-gray-500">导航</div>
+                <nav className="mt-3 grid grid-cols-4 gap-2">
+                  {LOGIN_LINKS.map((l) => {
+                    const icon =
+                      l.icon === "globe" ? (
+                        <Globe className="w-5 h-5" />
+                      ) : l.icon === "book" ? (
+                        <BookOpen className="w-5 h-5" />
+                      ) : l.icon === "about" ? (
+                        <BadgeInfo className="w-5 h-5" />
+                      ) : (
+                        <Mail className="w-5 h-5" />
+                      );
+
+                    return (
+                      <a
+                        key={l.href}
+                        href={l.href}
+                        target={l.href.startsWith("mailto:") ? undefined : "_blank"}
+                        rel={l.href.startsWith("mailto:") ? undefined : "noreferrer"}
+                        className="group rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors px-2 py-3 flex flex-col items-center justify-center gap-2"
+                      >
+                        <div className="text-gray-700 group-hover:text-blue-600 transition-colors">{icon}</div>
+                        <div className="text-[12px] text-gray-700 group-hover:text-blue-600 transition-colors">
+                          {l.label}
+                        </div>
+                      </a>
+                    );
+                  })}
+                </nav>
+
+                <div className="mt-6 flex items-center justify-between text-xs text-gray-500">
+                  <span>{LOGIN_PAGE.footer}</span>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    Serverless
+                  </span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* 右侧：登录模块 */}
+          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col">
+            <div className="px-8 py-7 h-[168px] bg-blue-600 text-white flex items-center">
+              <div className="flex items-center gap-4 w-full">
+                <div className="h-12 w-12 rounded-2xl bg-white/15 flex items-center justify-center">
+                  <HardDrive className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="text-2xl font-semibold leading-tight">{LOGIN_PAGE.title}</div>
+                  <div className="mt-1 text-sm text-white/80">{LOGIN_PAGE.subtitle}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-8 pt-6 pb-2">
+              <div className="text-center text-3xl font-bold tracking-tight text-blue-600">开始使用</div>
+            </div>
+
+            <form onSubmit={handleLogin} className="px-8 pb-8 pt-4 space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">账户 ID (Account ID)</label>
+                <input
+                  type="text"
+                  required
+                  value={formAccountId}
+                  onChange={(e) => setFormAccountId(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                  placeholder="请输入 Cloudflare 账户 ID"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">访问密钥 ID (Access Key ID)</label>
+                <input
+                  type="text"
+                  required
+                  value={formAccessKeyId}
+                  onChange={(e) => setFormAccessKeyId(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                  placeholder="请输入 R2 Access Key ID"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">机密访问密钥 (Secret Access Key)</label>
+                <div className="relative">
+                  <input
+                    type={showSecret ? "text" : "password"}
+                    required
+                    value={formSecretAccessKey}
+                    onChange={(e) => setFormSecretAccessKey(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all pr-10"
+                    placeholder="请输入 R2 Secret Access Key"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSecret(!showSecret)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="remember"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="remember" className="ml-2 text-sm text-gray-600">
+                  在本地记住密钥信息
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                连接 R2
+              </button>
+              <div className="text-xs text-gray-500 text-center pt-2">
+                您的密钥仅保存在本地浏览器中，并通过安全接口直接发送至 Cloudflare。
+              </div>
+            </form>
+          </section>
+        </div>
+
+        {/* 悬浮提示 */}
+        {toast ? (
+          <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50">
+            <div className="px-4 py-2 rounded-full bg-gray-900 text-white shadow-lg text-sm">{toast}</div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  // --- 渲染：主界面 ---
+  return (
+    <div className="flex h-screen bg-gray-50 text-gray-900 font-sans overflow-hidden">
+      
+      {/* 左侧：存储桶列表 */}
+      <div className="w-64 bg-white border-r border-gray-200 flex flex-col shadow-sm z-10">
+        <div className="p-5 border-b border-gray-100 flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-blue-200 shadow-lg">
+            <HardDrive className="w-5 h-5" />
+          </div>
+          <div>
+            <h1 className="font-bold text-base tracking-tight text-gray-800">Qing&apos;s R2 Admin</h1>
+            <p className="text-[10px] text-gray-400 font-medium">本地凭证模式</p>
+          </div>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-3 space-y-1">
+          <div className="text-xs font-bold text-gray-400 uppercase px-3 mb-2 mt-2 tracking-wider">存储桶列表</div>
+          {buckets.map(bucket => (
+            <button
+              key={bucket.Name}
+              onClick={() => { setSelectedBucket(bucket.Name!); setPath([]); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200 group ${
+                selectedBucket === bucket.Name 
+                  ? "bg-blue-50 text-blue-700 font-medium shadow-sm" 
+                  : "text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              <div className={`w-2 h-2 rounded-full ${selectedBucket === bucket.Name ? "bg-blue-500" : "bg-gray-300 group-hover:bg-gray-400"}`}></div>
+              <span className="truncate">{bucket.Name}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="p-4 border-t border-gray-100 bg-gray-50/50 space-y-3">
+          <div className={`flex items-center gap-2 text-xs px-3 py-2 rounded-md border ${
+            connectionStatus === "connected" ? "bg-green-50 text-green-700 border-green-100" : 
+            connectionStatus === "checking" ? "bg-yellow-50 text-yellow-700 border-yellow-100" : "bg-red-50 text-red-700 border-red-100"
+          }`}>
+            <Wifi className="w-3 h-3" />
+            <span className="font-medium">
+              {connectionStatus === "connected" ? "连接状态正常" : connectionStatus === "checking" ? "连接中..." : "连接状态异常"}
+            </span>
+          </div>
+
+          <div className="px-3 py-2 rounded-md border border-gray-200 bg-white text-xs text-gray-600">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium truncate">当前桶占用估算</span>
+              <button
+                onClick={() => selectedBucket && fetchBucketUsage(selectedBucket)}
+                disabled={!selectedBucket || usageLoading}
+                className="text-[11px] text-blue-600 hover:text-blue-700 disabled:opacity-50"
+              >
+                {usageLoading ? "计算中..." : "刷新"}
+              </button>
+            </div>
+            <div className="mt-1.5 flex items-center justify-between">
+              <span className="text-[11px] text-gray-500">对象数</span>
+              <span className="text-[11px] font-semibold text-gray-800">
+                {bucketUsage ? (bucketUsage.truncated ? `≥${bucketUsage.objects}` : `${bucketUsage.objects}`) : "-"}
+              </span>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="text-[11px] text-gray-500">容量</span>
+              <span className="text-[11px] font-semibold text-gray-800">
+                {bucketUsage ? (bucketUsage.truncated ? `≥${formatSize(bucketUsage.bytes)}` : formatSize(bucketUsage.bytes)) : "-"}
+              </span>
+            </div>
+            {bucketUsage?.truncated ? (
+              <div className="mt-1 text-[10px] text-gray-400">仅扫描前 {bucketUsage.pagesScanned} 页（每页最多 1000 项）</div>
+            ) : null}
+          </div>
+
+          <div className="px-3 py-2 rounded-md border border-gray-200 bg-white text-xs text-gray-600">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium truncate">账号总占用估算</span>
+              <button
+                onClick={() => fetchAccountUsageTotal(buckets)}
+                disabled={!buckets.length || accountUsageLoading}
+                className="text-[11px] text-blue-600 hover:text-blue-700 disabled:opacity-50"
+              >
+                {accountUsageLoading ? "计算中..." : "刷新"}
+              </button>
+            </div>
+            <div className="mt-1.5 flex items-center justify-between">
+              <span className="text-[11px] text-gray-500">桶数量</span>
+              <span className="text-[11px] font-semibold text-gray-800">{accountUsage ? accountUsage.buckets : "-"}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="text-[11px] text-gray-500">对象数</span>
+              <span className="text-[11px] font-semibold text-gray-800">
+                {accountUsage ? `${accountUsage.objects}` : "-"}
+              </span>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="text-[11px] text-gray-500">容量</span>
+              <span className="text-[11px] font-semibold text-gray-800">
+                {accountUsage ? formatSize(accountUsage.bytes) : "-"}
+              </span>
+            </div>
+            {accountUsage?.truncatedBuckets ? (
+              <div className="mt-1 text-[10px] text-gray-400">有 {accountUsage.truncatedBuckets} 个桶为截断估算</div>
+            ) : null}
+          </div>
+
+          <button
+            onClick={handleConfigureLinks}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-blue-600 hover:border-blue-200 rounded-lg text-xs font-medium transition-colors"
+          >
+            <Settings className="w-3 h-3" />
+            链接设置
+          </button>
+
+          <button 
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 rounded-lg text-xs font-medium transition-colors"
+          >
+            <LogOut className="w-3 h-3" />
+            退出登录
+          </button>
+        </div>
+      </div>
+
+      {/* 中间：文件浏览器 */}
+      <div className="flex-1 flex flex-col min-w-0 bg-white">
+        {/* 顶部工具栏 */}
+        <div className="h-16 border-b border-gray-200 flex items-center justify-between px-6 bg-white shrink-0">
+          <div className="flex items-center gap-1 text-sm text-gray-600 overflow-hidden mr-4">
+            <button onClick={() => setPath([])} className="hover:bg-gray-100 p-1.5 rounded-md transition-colors text-gray-500 flex items-center gap-1">
+              <Home className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs font-medium text-gray-600">根目录</span>
+            </button>
+            {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300" />}
+            {path.map((folder, idx) => (
+              <React.Fragment key={idx}>
+                <button 
+                  onClick={() => handleBreadcrumbClick(idx)}
+                  className="hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors font-medium truncate max-w-[120px]"
+                >
+                  {folder}
+                </button>
+                {idx < path.length - 1 && <ChevronRight className="w-4 h-4 text-gray-300" />}
+              </React.Fragment>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="relative hidden md:block">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input 
+                type="text" 
+                placeholder="搜索文件..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 pr-4 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 w-48 transition-all"
+              />
+            </div>
+            <div className="h-6 w-px bg-gray-200 mx-1"></div>
+            <button 
+              onClick={() => fetchFiles(selectedBucket!, path)} 
+              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+              title="刷新"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`p-2 rounded-lg transition-colors ${viewMode === "list" ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:bg-gray-100"}`}
+              title="列表视图"
+            >
+              <ListIcon className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode("grid")}
+              className={`p-2 rounded-lg transition-colors ${viewMode === "grid" ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:bg-gray-100"}`}
+              title="网格视图"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleBatchDownload}
+              disabled={selectedKeys.size === 0}
+              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="批量下载（所选文件）"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={() => {
+                if (!selectedBucket) return;
+                if (uploadTasks.length > 0) setUploadPanelOpen(true);
+                else fileInputRef.current?.click();
+              }}
+              disabled={!selectedBucket}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {uploadSummary.active > 0 ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>{uploadSummary.pct}%</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4" />
+                  <span>上传</span>
+                </>
+              )}
+            </button>
+            <input type="file" multiple ref={fileInputRef} className="hidden" onChange={handleUpload} />
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="h-1 w-full bg-blue-100">
+            <div className="h-1 w-1/3 bg-blue-500 animate-pulse" />
+          </div>
+        ) : (
+          <div className="h-1 w-full bg-transparent" />
+        )}
+
+        {/* 文件列表 */}
+        <div
+          className={`flex-1 overflow-y-auto p-6 bg-gray-50/30 ${loading ? "pointer-events-none" : ""}`}
+          onClick={() => {
+            setSelectedItem(null);
+          }}
+        >
+          {filteredFiles.length === 0 && !loading ? (
+            <div className="h-full flex flex-col items-center justify-center text-gray-400">
+              <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <Folder className="w-10 h-10 text-gray-300" />
+              </div>
+              <p className="text-sm font-medium">文件夹为空</p>
+            </div>
+          ) : (
+            <>
+              {viewMode === "grid" ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 content-start">
+                  {filteredFiles.map((file) => (
+                    <div
+                      key={file.key}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedItem(file);
+                      }}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        if (file.type === "folder") handleEnterFolder(file.name);
+                      }}
+                      className={`group relative p-4 rounded-xl border transition-all cursor-pointer flex flex-col items-center gap-3 text-center ${
+                        selectedItem?.key === file.key
+                          ? "bg-blue-50 border-blue-500 shadow-sm ring-1 ring-blue-500 z-10"
+                          : "bg-white border-gray-200 hover:border-blue-300 hover:shadow-md"
+                      }`}
+                    >
+                      <div className="w-14 h-14 flex items-center justify-center transition-transform group-hover:scale-105">
+                        {getIcon(file.type, file.name)}
+                      </div>
+	                      <div className="w-full min-w-0">
+	                        <p className="text-sm font-medium text-gray-700 truncate w-full px-1" title={file.name}>
+	                          {file.name}
+	                        </p>
+	                        <div className="mt-1 flex items-center justify-center gap-2">
+	                          <span className="text-[10px] px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-600 font-semibold">
+	                            {getFileTag(file)}
+	                          </span>
+	                          <span className="text-[10px] text-gray-400 font-medium">
+	                            {file.type === "folder" ? "文件夹" : formatSize(file.size)}
+	                          </span>
+	                        </div>
+	                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                  <div className="flex items-center px-4 py-2.5 text-[11px] font-semibold text-gray-500 bg-gray-50 border-b border-gray-200">
+                    <div className="w-10 flex items-center justify-center">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all"
+                        checked={filteredFiles.length > 0 && filteredFiles.every((f) => selectedKeys.has(f.key))}
+                        onChange={(e) => {
+                          const next = new Set(selectedKeys);
+                          if (e.target.checked) {
+                            for (const f of filteredFiles) next.add(f.key);
+                          } else {
+                            for (const f of filteredFiles) next.delete(f.key);
+                          }
+                          setSelectedKeys(next);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-4 h-4"
+                      />
+                    </div>
+                    <div className="flex-1">名称</div>
+                    <div className="w-28 text-right">大小</div>
+                    <div className="w-28 text-right hidden md:block">修改时间</div>
+                    <div className="w-40 text-right">操作</div>
+                  </div>
+                  <div>
+                    {filteredFiles.map((file) => {
+                      const checked = selectedKeys.has(file.key);
+                      return (
+                        <div
+                          key={file.key}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedItem(file);
+                          }}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            if (file.type === "folder") handleEnterFolder(file.name);
+                            else previewItem(file);
+                          }}
+                          className={`group flex items-center px-4 py-2.5 text-sm border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${
+                            selectedItem?.key === file.key ? "bg-blue-50" : "bg-white"
+                          }`}
+                        >
+                          <div className="w-10 flex items-center justify-center">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                const next = new Set(selectedKeys);
+                                if (e.target.checked) next.add(file.key);
+                                else next.delete(file.key);
+                                setSelectedKeys(next);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-4 h-4"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0 flex items-center gap-2">
+                            <div className="shrink-0">{getIcon(file.type, file.name, "sm")}</div>
+                            <div className="min-w-0 flex items-center gap-2">
+                              <div className="truncate" title={file.name}>{file.name}</div>
+                              <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-600 font-semibold">
+                                {getFileTag(file)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="w-28 text-right text-xs text-gray-500">
+                            {file.type === "folder" ? "-" : formatSize(file.size)}
+                          </div>
+                          <div className="w-28 text-right text-xs text-gray-500 hidden md:block">
+                            {file.lastModified ? new Date(file.lastModified).toLocaleDateString() : "-"}
+                          </div>
+                          <div className="w-40 flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {file.type === "folder" ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEnterFolder(file.name);
+                                }}
+                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                                title="打开"
+                              >
+                                <FolderOpen className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    previewItem(file);
+                                  }}
+                                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                                  title="预览"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    downloadItem(file);
+                                  }}
+                                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                                  title="下载"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    copyLinkForItem(file, "public");
+                                  }}
+                                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                                  title="复制公共链接"
+                                >
+                                  <Link2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    copyLinkForItem(file, "custom");
+                                  }}
+                                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                                  title="复制自定义链接"
+                                >
+                                  <Link2 className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* 右侧：信息面板 */}
+      <div className="w-80 bg-white border-l border-gray-200 flex flex-col shadow-sm z-10">
+        <div className="p-5 border-b border-gray-100">
+          <h2 className="font-bold text-gray-800 text-sm uppercase tracking-wide">详细信息</h2>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+          {selectedItem ? (
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+              <div className="flex flex-col items-center">
+                <div className="w-24 h-24 bg-gray-50 rounded-2xl border border-gray-100 flex items-center justify-center mb-4 shadow-sm">
+                  {getIcon(selectedItem.type, selectedItem.name)}
+                </div>
+                <h3 className="font-semibold text-gray-900 text-center break-all px-2 leading-snug">{selectedItem.name}</h3>
+                <div className="mt-2 inline-flex items-center gap-2">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-600 font-semibold">
+                    {getFileTag(selectedItem)}
+                  </span>
+                  {selectedItem.type === "file" ? (
+                    <span className="text-[10px] text-gray-400 font-medium">{formatSize(selectedItem.size)}</span>
+                  ) : null}
+                </div>
+              </div>
+              
+              <div className="space-y-0 text-sm border rounded-lg border-gray-100 overflow-hidden">
+                <div className="flex justify-between p-3 bg-gray-50/50 border-b border-gray-100">
+                  <span className="text-gray-500">类型</span>
+                  <span className="text-gray-900 font-medium">{selectedItem.type === "folder" ? "文件夹" : "文件"}</span>
+                </div>
+                <div className="flex justify-between p-3 bg-white border-b border-gray-100">
+                  <span className="text-gray-500">大小</span>
+                  <span className="text-gray-900 font-medium">{formatSize(selectedItem.size)}</span>
+                </div>
+                <div className="flex justify-between p-3 bg-gray-50/50">
+                  <span className="text-gray-500">修改时间</span>
+                  <span className="text-gray-900 font-medium text-right text-xs">
+                    {selectedItem.lastModified ? new Date(selectedItem.lastModified).toLocaleDateString() : "-"}
+                  </span>
+                </div>
+              </div>
+
+              {selectedItem.type === "folder" ? (
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    onClick={() => handleEnterFolder(selectedItem.name)}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors col-span-2"
+                  >
+                    <FolderOpen className="w-4 h-4" />
+                    打开文件夹
+                  </button>
+                  <button
+                    onClick={handleRename}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    重命名
+                  </button>
+                  <button
+                    onClick={() => handleMoveOrCopy("move")}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <ArrowRightLeft className="w-4 h-4" />
+                    移动
+                  </button>
+                  <button
+                    onClick={() => handleMoveOrCopy("copy")}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Copy className="w-4 h-4" />
+                    复制
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-red-600 hover:bg-red-50 hover:border-red-200 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    删除
+                  </button>
+                  <button
+                    onClick={() => copyLinkForItem(selectedItem, "public")}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Link2 className="w-4 h-4" />
+                    公共链接
+                  </button>
+                  <button
+                    onClick={() => copyLinkForItem(selectedItem, "custom")}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Link2 className="w-4 h-4" />
+                    自定义链接
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    onClick={() => previewItem(selectedItem)}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors col-span-2"
+                  >
+                    <Eye className="w-4 h-4" />
+                    预览
+                  </button>
+                  <button
+                    onClick={() => downloadItem(selectedItem)}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    下载
+                  </button>
+                  <button
+                    onClick={handleRename}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    重命名
+                  </button>
+                  <button
+                    onClick={() => handleMoveOrCopy("move")}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <ArrowRightLeft className="w-4 h-4" />
+                    移动
+                  </button>
+                  <button
+                    onClick={() => handleMoveOrCopy("copy")}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Copy className="w-4 h-4" />
+                    复制
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-red-600 hover:bg-red-50 hover:border-red-200 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    删除
+                  </button>
+                  <button
+                    onClick={() => copyLinkForItem(selectedItem, "public")}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Link2 className="w-4 h-4" />
+                    公共链接
+                  </button>
+                  <button
+                    onClick={() => copyLinkForItem(selectedItem, "custom")}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Link2 className="w-4 h-4" />
+                    自定义链接
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Search className="w-6 h-6 text-gray-300" />
+              </div>
+              <p className="text-gray-500 text-sm">选择一个文件以查看详情<br/>或进行管理</p>
+            </div>
+          )}
+
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100">
+            <h3 className="text-[10px] font-bold text-blue-800 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+              当前视图统计
+            </h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500">文件数</span>
+                <span className="text-sm font-bold text-gray-800">{currentViewStats.fileCount}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500">文件夹数</span>
+                <span className="text-sm font-bold text-gray-800">{currentViewStats.folderCount}</span>
+              </div>
+              <div className="h-px bg-blue-200/50 my-2"></div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500">总大小</span>
+                <span className="text-sm font-bold text-blue-700">{formatSize(currentViewStats.totalSize)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="p-4 border-t border-gray-100 bg-gray-50 text-[10px] text-gray-400 text-center">
+          <p>Qing&apos;s R2 Admin</p>
+          <p className="mt-0.5">Serverless R2 Manager</p>
+        </div>
+      </div>
+
+      <Modal
+        open={renameOpen}
+        title="重命名"
+        description={selectedItem ? `当前：${selectedItem.name}` : undefined}
+        onClose={() => setRenameOpen(false)}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setRenameOpen(false)}
+              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium"
+            >
+              取消
+            </button>
+            <button
+              onClick={executeRename}
+              className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium"
+            >
+              确认
+            </button>
+          </div>
+        }
+      >
+        <label className="block text-sm font-medium text-gray-700 mb-2">新名称</label>
+        <input
+          value={renameValue}
+          onChange={(e) => setRenameValue(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+          placeholder="输入新名称"
+        />
+      </Modal>
+
+      <Modal
+        open={moveOpen}
+        title={moveMode === "move" ? "移动" : "复制"}
+        description={selectedItem ? `对象：${selectedItem.key}` : undefined}
+        onClose={() => setMoveOpen(false)}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setMoveOpen(false)}
+              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium"
+            >
+              取消
+            </button>
+            <button
+              onClick={executeMoveOrCopy}
+              className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium"
+            >
+              确认
+            </button>
+          </div>
+        }
+      >
+        <label className="block text-sm font-medium text-gray-700 mb-2">目标路径</label>
+        <input
+          value={moveTarget}
+          onChange={(e) => setMoveTarget(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+          placeholder="例如：photos/ 或 a/b/c/"
+        />
+        <div className="mt-2 text-xs text-gray-500">以 `/` 结尾表示目标目录；不以 `/` 结尾表示目标 Key。</div>
+      </Modal>
+
+      <Modal
+        open={linkOpen}
+        title="链接设置"
+        description={selectedBucket ? `桶：${selectedBucket}` : undefined}
+        onClose={() => setLinkOpen(false)}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setLinkOpen(false)}
+              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium"
+            >
+              取消
+            </button>
+            <button
+              onClick={saveLinkConfig}
+              className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium"
+            >
+              保存
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">公共开发 URL（可选）</label>
+            <input
+              value={linkPublic}
+              onChange={(e) => setLinkPublic(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+              placeholder="例如：pub-xxxx.r2.dev"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">自定义域名（可选）</label>
+            <input
+              value={linkCustom}
+              onChange={(e) => setLinkCustom(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+              placeholder="例如：media.example.com"
+            />
+          </div>
+          <div className="text-xs text-gray-500">支持不带协议；会自动补全为 `https://` 并保证以 `/` 结尾。</div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={deleteOpen}
+        title="确认删除"
+        description={selectedItem ? `将删除：${selectedItem.key}` : undefined}
+        onClose={() => setDeleteOpen(false)}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setDeleteOpen(false)}
+              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium"
+            >
+              取消
+            </button>
+            <button
+              onClick={executeDelete}
+              className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-sm font-medium"
+            >
+              删除
+            </button>
+          </div>
+        }
+      >
+        <div className="text-sm text-gray-700">
+          此操作不可恢复。{selectedItem?.type === "folder" ? "（文件夹会递归删除前缀下的所有对象）" : null}
+        </div>
+      </Modal>
+
+      {uploadTasks.length > 0 ? (
+        <>
+          <button
+            onClick={() => setUploadPanelOpen((v) => !v)}
+            className="fixed bottom-5 right-5 z-40 flex items-center gap-2 px-4 py-2 rounded-full bg-gray-900 text-white shadow-lg hover:bg-gray-800"
+          >
+            <Upload className="w-4 h-4" />
+            <span className="text-sm font-medium">
+              上传 {uploadSummary.active ? `(${uploadSummary.active})` : ""}
+            </span>
+            <span className="text-xs text-gray-200">{uploadSummary.pct}%</span>
+          </button>
+
+          {uploadPanelOpen ? (
+            <div className="fixed bottom-20 right-5 z-40 w-[420px] max-w-[calc(100vw-2.5rem)] bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <div className="text-sm font-semibold text-gray-900">上传任务</div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-xs font-medium"
+                  >
+                    添加文件
+                  </button>
+                  <button
+                    onClick={() =>
+                      setUploadTasks((prev) => prev.filter((t) => t.status === "queued" || t.status === "uploading" || t.status === "paused"))
+                    }
+                    className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-xs font-medium"
+                  >
+                    清理已完成
+                  </button>
+                  <button
+                    onClick={() => setUploadPanelOpen(false)}
+                    className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"
+                    title="关闭"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-[50vh] overflow-auto divide-y divide-gray-100">
+                {uploadTasks.map((t) => {
+                  const pct = t.file.size ? Math.min(100, Math.round((Math.min(t.loaded, t.file.size) / t.file.size) * 100)) : 0;
+                  return (
+                    <div key={t.id} className="px-4 py-3">
+	                      <div className="flex items-start justify-between gap-3">
+	                        <div className="min-w-0">
+	                          <div className="text-sm font-medium text-gray-900 truncate" title={t.key}>
+	                            {t.file.name}
+	                          </div>
+	                          <div className="mt-0.5 text-[11px] text-gray-500 truncate" title={`${t.bucket}/${t.key}`}>
+	                            {t.bucket}/{t.key}
+	                          </div>
+	                        </div>
+	                        <div className="shrink-0 flex items-center gap-2">
+	                          <div className="text-right">
+	                            <div className="text-xs font-semibold text-gray-800">{pct}%</div>
+	                            <div className="text-[11px] text-gray-500">
+	                              {t.status === "uploading" ? formatSpeed(t.speedBps) : t.status}
+	                            </div>
+	                          </div>
+	                          {t.status === "uploading" ? (
+	                            <>
+	                              <button
+	                                onClick={() => pauseUploadTask(t.id)}
+	                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+	                                title="暂停"
+	                              >
+	                                <Pause className="w-4 h-4" />
+	                              </button>
+	                              <button
+	                                onClick={() => cancelUploadTask(t.id)}
+	                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+	                                title="取消"
+	                              >
+	                                <CircleX className="w-4 h-4" />
+	                              </button>
+	                            </>
+	                          ) : t.status === "paused" ? (
+	                            <>
+	                              <button
+	                                onClick={() => resumeUploadTask(t.id)}
+	                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+	                                title="继续"
+	                              >
+	                                <Play className="w-4 h-4" />
+	                              </button>
+	                              <button
+	                                onClick={() => cancelUploadTask(t.id)}
+	                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+	                                title="取消"
+	                              >
+	                                <CircleX className="w-4 h-4" />
+	                              </button>
+	                            </>
+	                          ) : t.status === "queued" ? (
+	                            <button
+	                              onClick={() => cancelUploadTask(t.id)}
+	                              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+	                              title="取消"
+	                            >
+	                              <CircleX className="w-4 h-4" />
+	                            </button>
+	                          ) : t.status === "error" ? (
+	                            <button
+	                              onClick={() => resumeUploadTask(t.id)}
+	                              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+	                              title="重试"
+	                            >
+	                              <Play className="w-4 h-4" />
+	                            </button>
+	                          ) : null}
+	                        </div>
+	                      </div>
+	                      <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
+	                        <div
+	                          className={`h-2 ${
+	                            t.status === "error"
+	                              ? "bg-red-500"
+	                              : t.status === "done"
+	                                ? "bg-green-500"
+	                                : t.status === "paused" || t.status === "canceled"
+	                                  ? "bg-gray-400"
+	                                  : "bg-blue-600"
+	                          }`}
+	                          style={{ width: `${pct}%` }}
+	                        />
+	                      </div>
+                      {t.status === "error" ? <div className="mt-2 text-[11px] text-red-600">{t.error ?? "上传失败"}</div> : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      {toast ? (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50">
+          <div className="px-4 py-2 rounded-full bg-gray-900 text-white shadow-lg text-sm">{toast}</div>
+        </div>
+      ) : null}
+
+      {preview ? (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-6"
+          onClick={() => setPreview(null)}
+        >
+          <div
+            className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+	            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
+	              <div className="min-w-0">
+	                <div className="text-sm font-semibold text-gray-900 truncate" title={preview.name}>
+	                  {preview.name}
+	                </div>
+	                <div className="text-[11px] text-gray-500 truncate" title={preview.key}>
+	                  {preview.key}
+	                </div>
+	              </div>
+	              <div className="flex items-center gap-2">
+	                <span className="hidden sm:inline-flex text-[10px] px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-600 font-semibold">
+	                  {getFileExt(preview.name).toUpperCase() || "FILE"}
+	                </span>
+	                <button
+	                  onClick={async () => {
+	                    try {
+	                      const url = await getSignedDownloadUrlForced(preview.bucket, preview.key, preview.name);
+	                      triggerDownloadUrl(url, preview.name);
+	                      setToast("已拉起下载");
+	                    } catch {
+	                      setToast("下载失败");
+	                    }
+	                  }}
+	                  className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
+	                  title="下载"
+	                >
+	                  <Download className="w-4 h-4" />
+	                </button>
+	                <button
+	                  onClick={() => setPreview(null)}
+	                  className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"
+	                  title="关闭"
+	                >
+	                  <X className="w-4 h-4" />
+	                </button>
+	              </div>
+	            </div>
+	            <div className="p-4 bg-gray-50">
+	              {preview.kind === "image" ? (
+	                <div className="flex items-center justify-center">
+	                  <img src={preview.url} alt={preview.name} className="max-h-[70vh] max-w-full rounded-lg shadow" />
+	                </div>
+	              ) : preview.kind === "video" ? (
+	                <div className="w-full aspect-video rounded-lg shadow bg-black overflow-hidden">
+	                  <video src={preview.url} controls className="w-full h-full object-contain" />
+	                </div>
+	              ) : preview.kind === "audio" ? (
+	                <audio src={preview.url} controls className="w-full" />
+	              ) : preview.kind === "pdf" ? (
+	                <iframe
+	                  src={preview.url}
+	                  className="w-full h-[70vh] rounded-lg shadow bg-white"
+	                  title="PDF Preview"
+	                />
+	              ) : preview.kind === "office" ? (
+	                <iframe
+	                  src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(preview.url)}`}
+	                  className="w-full h-[70vh] rounded-lg shadow bg-white"
+	                  title="Office Preview"
+	                />
+	              ) : preview.kind === "text" ? (
+	                <pre className="text-xs bg-white border border-gray-200 rounded-lg p-4 overflow-auto max-h-[70vh] whitespace-pre-wrap">
+	                  {preview.text ?? "加载中..."}
+	                </pre>
+	              ) : (
+	                <div className="bg-white border border-gray-200 rounded-xl p-10 flex flex-col items-center justify-center text-center">
+	                  <div className="w-28 h-28 rounded-full bg-gray-100 flex items-center justify-center">
+	                    <FileCode className="w-10 h-10 text-blue-600" />
+	                  </div>
+	                  <div className="mt-8 text-2xl font-semibold text-gray-900">无法预览此文件</div>
+	                  <div className="mt-3 text-sm text-gray-500">此文件类型暂不支持在线预览，请下载后查看。</div>
+	                  <button
+	                    onClick={async () => {
+	                      try {
+	                        const url = await getSignedDownloadUrlForced(preview.bucket, preview.key, preview.name);
+	                        triggerDownloadUrl(url, preview.name);
+	                        setToast("已拉起下载");
+	                      } catch {
+	                        setToast("下载失败");
+	                      }
+	                    }}
+	                    className="mt-8 inline-flex items-center gap-3 px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-lg"
+	                  >
+	                    <Download className="w-5 h-5" />
+	                    下载文件
+	                  </button>
+	                </div>
+	              )}
+	            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
