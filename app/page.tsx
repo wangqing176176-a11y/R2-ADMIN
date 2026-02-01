@@ -1443,30 +1443,30 @@ export default function R2Admin() {
             </div>
 
             <div className="px-8 pt-6 pb-2">
-              <div className="text-center text-3xl font-bold tracking-tight text-blue-600">访问登录</div>
+              <div className="text-center text-3xl font-bold tracking-tight text-blue-600">管理员登录</div>
             </div>
 
             <form onSubmit={handleLogin} className="px-8 pb-8 pt-4 space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">访问账号（可选）</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">管理账号</label>
                 <input
                   type="text"
                   value={formUsername}
                   onChange={(e) => setFormUsername(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                  placeholder="仅用于本地记忆，不参与鉴权"
+                  placeholder="请输入账号"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">访问密码</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">管理密码</label>
                 <div className="relative">
                   <input
                     type={showSecret ? "text" : "password"}
                     value={formPassword}
                     onChange={(e) => setFormPassword(e.target.value)}
                     className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all pr-10"
-                    placeholder="对应 Pages 环境变量：ADMIN_PASSWORD（未设置则可留空）"
+                    placeholder="请输入密码"
                   />
                   <button
                     type="button"
