@@ -1,3 +1,4 @@
+import "@/lib/edge-polyfills";
 import { NextRequest, NextResponse } from "next/server";
 import { getR2Client } from "@/lib/r2";
 import { getAuthFromHeaders } from "@/utils/auth";

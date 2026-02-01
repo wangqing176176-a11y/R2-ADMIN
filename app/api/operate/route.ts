@@ -1,3 +1,4 @@
+import "@/lib/edge-polyfills";
 import { NextRequest, NextResponse } from "next/server";
 import {
   CopyObjectCommand,

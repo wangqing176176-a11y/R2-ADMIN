@@ -1,3 +1,4 @@
+import "@/lib/edge-polyfills";
 import { NextRequest, NextResponse } from "next/server";
 import { ListObjectsV2Command, type ListObjectsV2CommandOutput } from "@aws-sdk/client-s3";
 import { getR2Client } from "@/lib/r2";
