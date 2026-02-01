@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { assertAdmin, getBucketById } from "@/lib/cf";
+import { assertAdmin, assertAdminOrToken, getBucketById, issueAccessToken } from "@/lib/cf";
 
 export const runtime = "edge";
 
@@ -33,9 +33,12 @@ export async function POST(req: NextRequest) {
       const partNumber = body.partNumber as number | undefined;
       if (!uploadId || !partNumber) return NextResponse.json({ error: "Missing params" }, { status: 400 });
 
+      const payload = `mp\n${bucketId}\n${key}\n${uploadId}\n${partNumber}`;
+      const token = await issueAccessToken(payload, 15 * 60);
+
       const url = `/api/multipart?bucket=${encodeURIComponent(bucketId)}&key=${encodeURIComponent(key)}&uploadId=${encodeURIComponent(uploadId)}&partNumber=${encodeURIComponent(
         String(partNumber),
-      )}`;
+      )}${token ? `&token=${encodeURIComponent(token)}` : ""}`;
       return NextResponse.json({ url });
     }
 
@@ -69,8 +72,6 @@ export async function POST(req: NextRequest) {
 // 上传分片 (PUT)
 export async function PUT(req: NextRequest) {
   try {
-    assertAdmin(req);
-
     const { searchParams } = new URL(req.url);
     const bucketId = searchParams.get("bucket");
     const key = searchParams.get("key");
@@ -79,12 +80,18 @@ export async function PUT(req: NextRequest) {
 
     const partNumber = partNumberStr ? Number.parseInt(partNumberStr, 10) : NaN;
     if (!bucketId || !key || !uploadId || !Number.isFinite(partNumber) || partNumber <= 0) {
-      return new Response(JSON.stringify({ error: "Missing params" }), { status: 400, headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "Missing params" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
+
+    const payload = `mp\n${bucketId}\n${key}\n${uploadId}\n${partNumber}`;
+    await assertAdminOrToken(req, searchParams, payload);
 
     const { bucket } = getBucketById(bucketId);
     const upload = bucket.resumeMultipartUpload(key, uploadId);
-    const res = await upload.uploadPart(partNumber, req.body);
+    const res: any = await upload.uploadPart(partNumber, req.body);
 
     const headers = new Headers();
     if (res?.etag) headers.set("ETag", res.etag);
@@ -92,6 +99,9 @@ export async function PUT(req: NextRequest) {
   } catch (error: any) {
     const status = typeof error?.status === "number" ? error.status : 500;
     const message = error instanceof Error ? error.message : String(error);
-    return new Response(JSON.stringify({ error: message }), { status, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: message }), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 }

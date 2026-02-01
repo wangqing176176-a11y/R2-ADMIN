@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { assertAdmin, getBucketById } from "@/lib/cf";
+import { assertAdmin, assertAdminOrToken, getBucketById, issueAccessToken } from "@/lib/cf";
 
 export const runtime = "edge";
 
@@ -68,8 +68,13 @@ export async function POST(req: NextRequest) {
     const { bucket, key } = (await req.json()) as { bucket?: string; key?: string };
     if (!bucket || !key) return NextResponse.json({ error: "Missing params" }, { status: 400 });
 
-    // The client uses XHR PUT to the returned URL.
-    const url = `/api/files?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
+    // The client uses XHR PUT to the returned URL (cannot attach custom headers).
+    const payload = `put\n${bucket}\n${key}`;
+    const token = await issueAccessToken(payload, 15 * 60);
+
+    const url = `/api/files?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}${
+      token ? `&token=${encodeURIComponent(token)}` : ""
+    }`;
     return NextResponse.json({ url });
   } catch (error: any) {
     const status = typeof error?.status === "number" ? error.status : 500;
@@ -81,12 +86,13 @@ export async function POST(req: NextRequest) {
 // 单文件上传 (PUT)
 export async function PUT(req: NextRequest) {
   try {
-    assertAdmin(req);
-
     const { searchParams } = new URL(req.url);
     const bucketId = searchParams.get("bucket");
     const key = searchParams.get("key");
     if (!bucketId || !key) return new Response(JSON.stringify({ error: "Missing params" }), { status: 400 });
+
+    const payload = `put\n${bucketId}\n${key}`;
+    await assertAdminOrToken(req, searchParams, payload);
 
     const { bucket } = getBucketById(bucketId);
     const contentType = req.headers.get("content-type") || undefined;

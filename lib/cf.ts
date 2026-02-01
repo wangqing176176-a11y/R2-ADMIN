@@ -77,6 +77,78 @@ export const assertAdmin = (req: Request) => {
   }
 };
 
+const getTokenSecret = (): string | null => {
+  const env = getEnv();
+  const explicit = (env["ADMIN_TOKEN_SECRET"] as string | undefined | null) ?? null;
+  if (explicit && String(explicit).length) return String(explicit);
+  return getAdminPassword();
+};
+
+const b64urlEncode = (bytes: Uint8Array) => {
+  let base64: string;
+  if (typeof Buffer !== "undefined") base64 = Buffer.from(bytes).toString("base64");
+  else {
+    let s = "";
+    for (const b of bytes) s += String.fromCharCode(b);
+    // eslint-disable-next-line no-undef
+    base64 = btoa(s);
+  }
+  return base64.replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+};
+
+const timingSafeEq = (a: string, b: string) => {
+  if (a.length !== b.length) return false;
+  let out = 0;
+  for (let i = 0; i < a.length; i++) out |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return out === 0;
+};
+
+const signHmac = async (secret: string, message: string) => {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
+  return b64urlEncode(new Uint8Array(sig));
+};
+
+export const issueAccessToken = async (payload: string, expiresInSeconds = 600) => {
+  const secret = getTokenSecret();
+  if (!secret) return null;
+  const exp = Math.floor(Date.now() / 1000) + Math.max(30, Math.min(24 * 3600, expiresInSeconds));
+  const sig = await signHmac(secret, `${payload}\n${exp}`);
+  return `${exp}.${sig}`;
+};
+
+export const verifyAccessToken = async (payload: string, token: string) => {
+  const secret = getTokenSecret();
+  if (!secret) return false;
+  const [expStr, sig] = token.split(".", 2);
+  const exp = expStr ? Number.parseInt(expStr, 10) : NaN;
+  if (!Number.isFinite(exp)) return false;
+  if (exp < Math.floor(Date.now() / 1000)) return false;
+  const expected = await signHmac(secret, `${payload}\n${exp}`);
+  return timingSafeEq(expected, sig);
+};
+
+export const assertAdminOrToken = async (req: Request, searchParams: URLSearchParams, payload: string) => {
+  const required = getAdminPassword();
+  if (!required) return;
+
+  const got = req.headers.get("x-admin-password") ?? "";
+  if (got === required) return;
+
+  const token = searchParams.get("token") ?? "";
+  if (token && (await verifyAccessToken(payload, token))) return;
+
+  const err = new Error("Unauthorized") as Error & { status?: number };
+  err.status = 401;
+  throw err;
+};
+
 const looksLikeR2Bucket = (v: unknown) => {
   if (!v || typeof v !== "object") return false;
   const o = v as Record<string, unknown>;
