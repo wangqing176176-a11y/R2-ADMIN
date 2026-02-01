@@ -773,12 +773,26 @@ export default function R2Admin() {
     if (!createRes.ok || !createData.uploadId) throw new Error(createData.error || "create multipart failed");
     const uploadId = createData.uploadId as string;
 
-    const partSize = 10 * 1024 * 1024;
+    // R2 multipart parts should be >= 5MiB (except the last part). Choose a part size that
+    // yields a few parts even for medium files, so we can upload parts in parallel and improve
+    // throughput on networks where a single connection is slow.
+    const pickPartSize = (size: number) => {
+      const MiB = 1024 * 1024;
+      const min = 8 * MiB;
+      const max = 64 * MiB;
+      const targetParts = 6;
+      const raw = Math.ceil(size / targetParts);
+      const clamped = Math.max(min, Math.min(max, raw));
+      // Round up to whole MiB to avoid odd sizes.
+      return Math.ceil(clamped / MiB) * MiB;
+    };
+
+    const partSize = pickPartSize(file.size);
     const partCount = Math.ceil(file.size / partSize);
     const partLoaded = new Map<number, number>();
     const parts: Array<{ etag: string; partNumber: number }> = [];
 
-    const concurrency = 3;
+    const concurrency = Math.min(6, partCount);
     let nextPart = 1;
     let aborted = false;
 
@@ -887,7 +901,9 @@ export default function R2Admin() {
           error: undefined,
         }));
 
-        const threshold = 100 * 1024 * 1024;
+        // Prefer multipart for most files to improve throughput on some networks/regions.
+        // Keep small files as single PUT to reduce overhead.
+        const threshold = 8 * 1024 * 1024;
         const uploadFn = next.file.size >= threshold ? uploadMultipartFile : uploadSingleFile;
 
         let lastAt = performance.now();
