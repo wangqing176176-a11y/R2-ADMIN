@@ -11,6 +11,7 @@ import {
   LayoutGrid, List as ListIcon, Download, Link2, Copy, ArrowRightLeft, FolderOpen, Settings, X,
   Pause, Play, CircleX,
   Globe, BadgeInfo, Mail, BookOpen,
+  FolderPlus,
 } from "lucide-react";
 
 // --- 类型定义 ---
@@ -22,7 +23,7 @@ type FileItem = {
   size?: number;
   lastModified?: string;
 };
-type AdminAuth = { password: string };
+type AdminAuth = { username?: string; password: string };
 type BucketUsage = {
   bucket: string;
   prefix: string;
@@ -109,7 +110,8 @@ export default function R2Admin() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [path, setPath] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<"checking" | "connected" | "error">("checking");
+  const [connectionStatus, setConnectionStatus] = useState<"checking" | "connected" | "unbound" | "error">("checking");
+  const [connectionDetail, setConnectionDetail] = useState<string | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
   const [bucketUsage, setBucketUsage] = useState<BucketUsage | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
@@ -124,6 +126,9 @@ export default function R2Admin() {
   const [uploadQueuePaused, setUploadQueuePaused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [searchResults, setSearchResults] = useState<FileItem[]>([]);
+  const [searchCursor, setSearchCursor] = useState<string | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [linkConfigMap, setLinkConfigMap] = useState<LinkConfigMap>({});
 
   const [toast, setToast] = useState<string | null>(null);
@@ -134,6 +139,10 @@ export default function R2Admin() {
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveMode, setMoveMode] = useState<"move" | "copy">("move");
   const [moveTarget, setMoveTarget] = useState("");
+  const [moveSources, setMoveSources] = useState<string[]>([]);
+
+  const [mkdirOpen, setMkdirOpen] = useState(false);
+  const [mkdirName, setMkdirName] = useState("");
 
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkPublic, setLinkPublic] = useState("");
@@ -155,6 +164,7 @@ export default function R2Admin() {
   }, [uploadQueuePaused]);
 
   // 登录表单状态
+  const [formUsername, setFormUsername] = useState("");
   const [formPassword, setFormPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
@@ -163,6 +173,10 @@ export default function R2Admin() {
   useEffect(() => {
     const stored = localStorage.getItem("admin_password");
     if (stored) setAuth({ password: stored });
+    if (stored) setRememberMe(true);
+
+    const storedUser = localStorage.getItem("admin_username");
+    if (storedUser) setFormUsername(storedUser);
 
     const storedLinks = localStorage.getItem("r2_link_config_v1");
     if (storedLinks) {
@@ -198,7 +212,8 @@ export default function R2Admin() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const pw = formPassword.trim();
-    const nextAuth: AdminAuth | null = pw ? { password: pw } : null;
+    const user = formUsername.trim();
+    const nextAuth: AdminAuth | null = pw ? { password: pw, username: user || undefined } : null;
 
     try {
       setLoading(true);
@@ -216,11 +231,16 @@ export default function R2Admin() {
       if (rememberMe) {
         if (nextAuth?.password) localStorage.setItem("admin_password", nextAuth.password);
         else localStorage.removeItem("admin_password");
+        if (nextAuth?.username) localStorage.setItem("admin_username", nextAuth.username);
+        else localStorage.removeItem("admin_username");
+      } else {
+        localStorage.removeItem("admin_password");
       }
       setAuthRequired(false);
       setBuckets(data.buckets || []);
       if (!selectedBucket && data.buckets?.length) setSelectedBucket(data.buckets[0].id);
-      setConnectionStatus("connected");
+      setConnectionStatus((data.buckets?.length ?? 0) > 0 ? "connected" : "unbound");
+      setConnectionDetail((data.buckets?.length ?? 0) > 0 ? null : "未绑定存储桶：请在 Cloudflare Pages 设置中绑定 R2 存储桶");
       setToast("已解锁");
     } catch {
       setToast("解锁失败");
@@ -231,6 +251,7 @@ export default function R2Admin() {
 
   const handleLogout = () => {
     localStorage.removeItem("admin_password");
+    localStorage.removeItem("admin_username");
     setAuth(null);
     setBuckets([]);
     setSelectedBucket(null);
@@ -248,6 +269,7 @@ export default function R2Admin() {
     setDeleteOpen(false);
     setAuthRequired(false);
     setConnectionStatus("checking");
+    setConnectionDetail(null);
     setToast("已锁定");
     setTimeout(() => fetchBuckets(), 0);
   };
@@ -255,6 +277,7 @@ export default function R2Admin() {
   // --- API 调用 ---
   const fetchBuckets = async () => {
     setConnectionStatus("checking");
+    setConnectionDetail(null);
     try {
       const res = await fetchWithAuth("/api/buckets");
       const data = await res.json().catch(() => ({}));
@@ -262,22 +285,33 @@ export default function R2Admin() {
       if (res.status === 401) {
         setAuthRequired(true);
         setConnectionStatus("error");
+        setConnectionDetail("需要管理密码（ADMIN_PASSWORD）");
         return;
       }
 
       if (res.ok && data.buckets) {
         setAuthRequired(false);
         setBuckets(data.buckets);
-        setConnectionStatus("connected");
-        if (data.buckets.length > 0 && !selectedBucket) {
-          setSelectedBucket(data.buckets[0].id);
+        if (data.buckets.length === 0) {
+          setSelectedBucket(null);
+          setFiles([]);
+          setPath([]);
+          setConnectionStatus("unbound");
+          setConnectionDetail("未绑定存储桶：请在 Cloudflare Pages 设置中绑定 R2 存储桶");
+        } else {
+          setConnectionStatus("connected");
+          if (data.buckets.length > 0 && !selectedBucket) {
+            setSelectedBucket(data.buckets[0].id);
+          }
         }
       } else {
         setConnectionStatus("error");
+        if (data.error) setConnectionDetail(String(data.error));
         if (data.error) setToast(`连接失败: ${data.error}`);
       }
     } catch (e) {
       setConnectionStatus("error");
+      setConnectionDetail("网络或运行时异常");
       console.error(e);
     }
   };
@@ -294,6 +328,31 @@ export default function R2Admin() {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const runGlobalSearch = async (bucketName: string, term: string) => {
+    const q = term.trim();
+    if (!q) {
+      setSearchResults([]);
+      setSearchCursor(null);
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const res = await fetchWithAuth(
+        `/api/search?bucket=${encodeURIComponent(bucketName)}&q=${encodeURIComponent(q)}&limit=200`,
+      );
+      const data = await res.json();
+      if (res.ok) {
+        setSearchResults(data.items || []);
+        setSearchCursor(data.cursor ?? null);
+      } else {
+        setSearchResults([]);
+        setSearchCursor(null);
+      }
+    } finally {
+      setSearchLoading(false);
     }
   };
 
@@ -320,6 +379,24 @@ export default function R2Admin() {
   }, [selectedBucket, path, auth]);
 
   useEffect(() => {
+    if (!selectedBucket) {
+      setSearchResults([]);
+      setSearchCursor(null);
+      return;
+    }
+    const term = searchTerm.trim();
+    if (!term) {
+      setSearchResults([]);
+      setSearchCursor(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      runGlobalSearch(selectedBucket, term).catch(() => {});
+    }, 250);
+    return () => clearTimeout(t);
+  }, [searchTerm, selectedBucket, auth]);
+
+  useEffect(() => {
     if (selectedBucket) {
       fetchBucketUsage(selectedBucket);
     }
@@ -342,7 +419,7 @@ export default function R2Admin() {
         for (;;) {
           const i = index++;
           if (i >= bucketList.length) break;
-          const name = bucketList[i].Name;
+          const name = bucketList[i].id;
           const res = await fetchWithAuth(`/api/usage?bucket=${encodeURIComponent(name)}&maxPages=10`);
           const data = await res.json();
           if (res.ok) {
@@ -433,6 +510,54 @@ export default function R2Admin() {
 
   const handleBreadcrumbClick = (index: number) => {
     setPath(path.slice(0, index + 1));
+    setSearchTerm("");
+  };
+
+  const refreshCurrentView = async () => {
+    if (!selectedBucket) return;
+    const term = searchTerm.trim();
+    if (term) await runGlobalSearch(selectedBucket, term);
+    else await fetchFiles(selectedBucket, path);
+  };
+
+  const openMkdir = () => {
+    if (!selectedBucket) return;
+    setMkdirName("");
+    setMkdirOpen(true);
+  };
+
+  const executeMkdir = async () => {
+    if (!selectedBucket) return;
+    const name = mkdirName.trim();
+    if (!name) {
+      setMkdirOpen(false);
+      return;
+    }
+    if (name.includes("/")) {
+      setToast("文件夹名不支持 /");
+      return;
+    }
+    const prefix = path.length > 0 ? path.join("/") + "/" : "";
+    try {
+      setLoading(true);
+      const res = await fetchWithAuth("/api/operate", {
+        method: "POST",
+        body: JSON.stringify({
+          bucket: selectedBucket,
+          targetKey: `${prefix}${name}/`,
+          operation: "mkdir",
+        }),
+      });
+      if (!res.ok) throw new Error("mkdir failed");
+      setMkdirOpen(false);
+      setSearchTerm("");
+      await fetchFiles(selectedBucket, path);
+      setToast("已创建文件夹");
+    } catch {
+      setToast("创建失败");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = () => {
@@ -463,7 +588,7 @@ export default function R2Admin() {
       }
 
       setDeleteOpen(false);
-      fetchFiles(selectedBucket, path);
+      await refreshCurrentView();
       setSelectedItem(null);
       setSelectedKeys(new Set());
       setToast("已删除");
@@ -480,6 +605,13 @@ export default function R2Admin() {
     setRenameOpen(true);
   };
 
+  const openRenameFor = (item: FileItem) => {
+    if (!selectedBucket) return;
+    setSelectedItem(item);
+    setRenameValue(item.name);
+    setRenameOpen(true);
+  };
+
   const executeRename = async () => {
     if (!selectedBucket || !selectedItem) return;
     const newName = renameValue.trim();
@@ -488,7 +620,16 @@ export default function R2Admin() {
       return;
     }
 
-    const prefix = path.length > 0 ? path.join("/") + "/" : "";
+    const currentKey = selectedItem.key;
+    let prefix = "";
+    if (selectedItem.type === "folder") {
+      const trimmed = currentKey.endsWith("/") ? currentKey.slice(0, -1) : currentKey;
+      const parts = trimmed.split("/").filter(Boolean);
+      prefix = parts.length > 1 ? `${parts.slice(0, -1).join("/")}/` : "";
+    } else {
+      const parts = currentKey.split("/").filter(Boolean);
+      prefix = parts.length > 1 ? `${parts.slice(0, -1).join("/")}/` : "";
+    }
     const targetKey = prefix + newName + (selectedItem.type === "folder" ? "/" : "");
 
     try {
@@ -504,7 +645,7 @@ export default function R2Admin() {
       });
       if (!res.ok) throw new Error("rename failed");
       setRenameOpen(false);
-      fetchFiles(selectedBucket, path);
+      await refreshCurrentView();
       setSelectedItem(null);
       setSelectedKeys(new Set());
       setToast("已重命名");
@@ -520,11 +661,36 @@ export default function R2Admin() {
     setMoveMode(mode);
     const defaultDest = path.length ? path.join("/") + "/" : "";
     setMoveTarget(defaultDest);
+    setMoveSources([selectedItem.key]);
+    setMoveOpen(true);
+  };
+
+  const openMoveFor = (item: FileItem, mode: "move" | "copy") => {
+    if (!selectedBucket) return;
+    setSelectedItem(item);
+    setMoveMode(mode);
+    const defaultDest = path.length ? path.join("/") + "/" : "";
+    setMoveTarget(defaultDest);
+    setMoveSources([item.key]);
+    setMoveOpen(true);
+  };
+
+  const openBatchMove = () => {
+    if (!selectedBucket) return;
+    const keys = Array.from(selectedKeys).filter((k) => !k.endsWith("/"));
+    if (!keys.length) {
+      setToast("请先勾选要移动的文件");
+      return;
+    }
+    setMoveMode("move");
+    const defaultDest = path.length ? path.join("/") + "/" : "";
+    setMoveTarget(defaultDest);
+    setMoveSources(keys);
     setMoveOpen(true);
   };
 
   const executeMoveOrCopy = async () => {
-    if (!selectedBucket || !selectedItem) return;
+    if (!selectedBucket) return;
     const input = moveTarget.trim();
     if (!input) {
       setMoveOpen(false);
@@ -534,28 +700,45 @@ export default function R2Admin() {
     let cleaned = input;
     if (cleaned.startsWith("/")) cleaned = cleaned.slice(1);
 
-    const suffix = selectedItem.type === "folder" ? "/" : "";
-    let targetKey = cleaned;
-    if (cleaned.endsWith("/")) {
-      targetKey = cleaned + selectedItem.name + suffix;
-    } else {
-      if (selectedItem.type === "folder" && !targetKey.endsWith("/")) targetKey += "/";
-    }
+    const sources = moveSources.length ? moveSources : selectedItem ? [selectedItem.key] : [];
+    if (!sources.length) return;
 
     try {
       setLoading(true);
-      const res = await fetchWithAuth("/api/operate", {
-        method: "POST",
-        body: JSON.stringify({
-          bucket: selectedBucket,
-          sourceKey: selectedItem.key,
-          targetKey,
-          operation: moveMode,
-        }),
-      });
+      const op = moveMode === "move" ? "move" : "copy";
+      const manyOp = op === "move" ? "moveMany" : "copyMany";
+      const useMany = sources.length > 1 || !selectedItem || sources[0] !== selectedItem.key;
+
+      const res =
+        useMany
+          ? await fetchWithAuth("/api/operate", {
+              method: "POST",
+              body: JSON.stringify({
+                bucket: selectedBucket,
+                sourceKeys: sources,
+                targetPrefix: cleaned,
+                operation: manyOp,
+              }),
+            })
+          : await fetchWithAuth("/api/operate", {
+              method: "POST",
+              body: JSON.stringify({
+                bucket: selectedBucket,
+                sourceKey: selectedItem.key,
+                targetKey: (() => {
+                  const suffix = selectedItem.type === "folder" ? "/" : "";
+                  let targetKey = cleaned;
+                  if (cleaned.endsWith("/")) targetKey = cleaned + selectedItem.name + suffix;
+                  else if (selectedItem.type === "folder" && !targetKey.endsWith("/")) targetKey += "/";
+                  return targetKey;
+                })(),
+                operation: op,
+              }),
+            });
       if (!res.ok) throw new Error("operate failed");
       setMoveOpen(false);
-      fetchFiles(selectedBucket, path);
+      setMoveSources([]);
+      await refreshCurrentView();
       setSelectedItem(null);
       setSelectedKeys(new Set());
       setToast(moveMode === "move" ? "已移动" : "已复制");
@@ -969,9 +1152,10 @@ export default function R2Admin() {
 
   // --- 视图数据处理 ---
   const filteredFiles = useMemo(() => {
-    if (!searchTerm) return files;
-    return files.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [files, searchTerm]);
+    const term = searchTerm.trim();
+    if (!term) return files;
+    return searchResults;
+  }, [files, searchResults, searchTerm]);
 
   const uploadSummary = useMemo(() => {
     const totalBytes = uploadTasks.reduce((acc, t) => acc + t.file.size, 0);
@@ -1107,19 +1291,30 @@ export default function R2Admin() {
             </div>
 
             <div className="px-8 pt-6 pb-2">
-              <div className="text-center text-3xl font-bold tracking-tight text-blue-600">开始使用</div>
+              <div className="text-center text-3xl font-bold tracking-tight text-blue-600">访问登录</div>
             </div>
 
             <form onSubmit={handleLogin} className="px-8 pb-8 pt-4 space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">管理密码（可选）</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">访问账号（可选）</label>
+                <input
+                  type="text"
+                  value={formUsername}
+                  onChange={(e) => setFormUsername(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                  placeholder="仅用于本地记忆，不参与鉴权"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">访问密码</label>
                 <div className="relative">
                   <input
                     type={showSecret ? "text" : "password"}
                     value={formPassword}
                     onChange={(e) => setFormPassword(e.target.value)}
                     className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all pr-10"
-                    placeholder="如未设置 ADMIN_PASSWORD，可留空"
+                    placeholder="对应 Pages 环境变量：ADMIN_PASSWORD（未设置则可留空）"
                   />
                   <button
                     type="button"
@@ -1152,7 +1347,7 @@ export default function R2Admin() {
                 进入管理
               </button>
               <div className="text-xs text-gray-500 text-center pt-2">
-                本站使用 Cloudflare Pages 绑定的 R2 存储桶进行管理；如设置了 ADMIN_PASSWORD，将要求输入密码。
+                本站使用 Cloudflare Pages 绑定的 R2 存储桶进行管理；如设置了 ADMIN_PASSWORD，将要求输入访问密码。
               </div>
             </form>
           </section>
@@ -1180,37 +1375,49 @@ export default function R2Admin() {
           </div>
           <div>
             <h1 className="font-bold text-base tracking-tight text-gray-800">Qing&apos;s R2 Admin</h1>
-            <p className="text-[10px] text-gray-400 font-medium">本地凭证模式</p>
+            <p className="text-[10px] text-gray-400 font-medium">绑定桶模式</p>
           </div>
         </div>
         
         <div className="flex-1 overflow-y-auto p-3 space-y-1">
           <div className="text-xs font-bold text-gray-400 uppercase px-3 mb-2 mt-2 tracking-wider">存储桶列表</div>
-          {buckets.map(bucket => (
+          {buckets.map((bucket) => (
             <button
-              key={bucket.Name}
-              onClick={() => { setSelectedBucket(bucket.Name!); setPath([]); }}
+              key={bucket.id}
+              onClick={() => { setSelectedBucket(bucket.id); setPath([]); setSearchTerm(""); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200 group ${
-                selectedBucket === bucket.Name 
+                selectedBucket === bucket.id
                   ? "bg-blue-50 text-blue-700 font-medium shadow-sm" 
                   : "text-gray-600 hover:bg-gray-50"
               }`}
             >
-              <div className={`w-2 h-2 rounded-full ${selectedBucket === bucket.Name ? "bg-blue-500" : "bg-gray-300 group-hover:bg-gray-400"}`}></div>
+              <div className={`w-2 h-2 rounded-full ${selectedBucket === bucket.id ? "bg-blue-500" : "bg-gray-300 group-hover:bg-gray-400"}`}></div>
               <span className="truncate">{bucket.Name}</span>
             </button>
           ))}
         </div>
 
         <div className="p-4 border-t border-gray-100 bg-gray-50/50 space-y-3">
-          <div className={`flex items-center gap-2 text-xs px-3 py-2 rounded-md border ${
+          <div className={`text-xs px-3 py-2 rounded-md border ${
             connectionStatus === "connected" ? "bg-green-50 text-green-700 border-green-100" : 
-            connectionStatus === "checking" ? "bg-yellow-50 text-yellow-700 border-yellow-100" : "bg-red-50 text-red-700 border-red-100"
+            connectionStatus === "checking" ? "bg-yellow-50 text-yellow-700 border-yellow-100" :
+            connectionStatus === "unbound" ? "bg-blue-50 text-blue-700 border-blue-100" : "bg-red-50 text-red-700 border-red-100"
           }`}>
+            <div className="flex items-center gap-2">
             <Wifi className="w-3 h-3" />
             <span className="font-medium">
-              {connectionStatus === "connected" ? "连接状态正常" : connectionStatus === "checking" ? "连接中..." : "连接状态异常"}
+              {connectionStatus === "connected"
+                ? "连接状态正常"
+                : connectionStatus === "checking"
+                  ? "连接中..."
+                  : connectionStatus === "unbound"
+                    ? "未绑定存储桶"
+                    : "连接异常"}
             </span>
+            </div>
+            {connectionDetail ? (
+              <div className="mt-1 text-[10px] leading-relaxed opacity-80">{connectionDetail}</div>
+            ) : null}
           </div>
 
           <div className="px-3 py-2 rounded-md border border-gray-200 bg-white text-xs text-gray-600">
@@ -1296,7 +1503,7 @@ export default function R2Admin() {
         {/* 顶部工具栏 */}
         <div className="h-16 border-b border-gray-200 flex items-center justify-between px-6 bg-white shrink-0">
           <div className="flex items-center gap-1 text-sm text-gray-600 overflow-hidden mr-4">
-            <button onClick={() => setPath([])} className="hover:bg-gray-100 p-1.5 rounded-md transition-colors text-gray-500 flex items-center gap-1">
+            <button onClick={() => { setPath([]); setSearchTerm(""); }} className="hover:bg-gray-100 p-1.5 rounded-md transition-colors text-gray-500 flex items-center gap-1">
               <Home className="w-4 h-4" />
               <span className="hidden sm:inline text-xs font-medium text-gray-600">根目录</span>
             </button>
@@ -1319,11 +1526,16 @@ export default function R2Admin() {
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input 
                 type="text" 
-                placeholder="搜索文件..." 
+                placeholder="全局搜索（当前桶）..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9 pr-4 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 w-48 transition-all"
               />
+              {searchLoading ? (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <RefreshCw className="w-4 h-4 text-gray-400 animate-spin" />
+                </div>
+              ) : null}
             </div>
             <div className="h-6 w-px bg-gray-200 mx-1"></div>
             <button 
@@ -1355,6 +1567,22 @@ export default function R2Admin() {
             >
               <Download className="w-4 h-4" />
             </button>
+            <button
+              onClick={openBatchMove}
+              disabled={selectedKeys.size === 0}
+              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="批量移动（所选文件）"
+            >
+              <ArrowRightLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={openMkdir}
+              disabled={!selectedBucket || !!searchTerm.trim()}
+              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title={searchTerm.trim() ? "搜索中无法新建文件夹" : "新建文件夹"}
+            >
+              <FolderPlus className="w-4 h-4" />
+            </button>
             <button 
               onClick={() => {
                 if (!selectedBucket) return;
@@ -1380,7 +1608,7 @@ export default function R2Admin() {
           </div>
         </div>
 
-        {loading ? (
+        {loading || searchLoading ? (
           <div className="h-1 w-full bg-blue-100">
             <div className="h-1 w-1/3 bg-blue-500 animate-pulse" />
           </div>
@@ -1395,12 +1623,12 @@ export default function R2Admin() {
             setSelectedItem(null);
           }}
         >
-          {filteredFiles.length === 0 && !loading ? (
+          {filteredFiles.length === 0 && !loading && !searchLoading ? (
             <div className="h-full flex flex-col items-center justify-center text-gray-400">
               <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-4">
                 <Folder className="w-10 h-10 text-gray-300" />
               </div>
-              <p className="text-sm font-medium">文件夹为空</p>
+              <p className="text-sm font-medium">{searchTerm.trim() ? "未找到匹配内容" : "文件夹为空"}</p>
             </div>
           ) : (
             <>
@@ -1518,28 +1746,40 @@ export default function R2Admin() {
                           </div>
                           <div className="w-40 flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             {file.type === "folder" ? (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEnterFolder(file.name);
-                                }}
-                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
-                                title="打开"
-                              >
-                                <FolderOpen className="w-4 h-4" />
-                              </button>
-                            ) : (
                               <>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    previewItem(file);
+                                    handleEnterFolder(file.name);
                                   }}
                                   className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
-                                  title="预览"
+                                  title="打开"
                                 >
-                                  <Eye className="w-4 h-4" />
+                                  <FolderOpen className="w-4 h-4" />
                                 </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openRenameFor(file);
+                                  }}
+                                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                                  title="重命名"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openMoveFor(file, "move");
+                                  }}
+                                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                                  title="移动"
+                                >
+                                  <ArrowRightLeft className="w-4 h-4" />
+                                </button>
+                              </>
+                            ) : (
+                              <>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -1553,22 +1793,22 @@ export default function R2Admin() {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    copyLinkForItem(file, "public");
+                                    openRenameFor(file);
                                   }}
                                   className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
-                                  title="复制公共链接"
+                                  title="重命名"
                                 >
-                                  <Link2 className="w-4 h-4" />
+                                  <Edit2 className="w-4 h-4" />
                                 </button>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    copyLinkForItem(file, "custom");
+                                    openMoveFor(file, "move");
                                   }}
                                   className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
-                                  title="复制自定义链接"
+                                  title="移动"
                                 >
-                                  <Link2 className="w-4 h-4" />
+                                  <ArrowRightLeft className="w-4 h-4" />
                                 </button>
                               </>
                             )}
@@ -1777,6 +2017,37 @@ export default function R2Admin() {
       </div>
 
       <Modal
+        open={mkdirOpen}
+        title="新建文件夹"
+        description={path.length ? `当前位置：/${path.join("/")}/` : "当前位置：/（根目录）"}
+        onClose={() => { setMkdirOpen(false); setMkdirName(""); }}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => { setMkdirOpen(false); setMkdirName(""); }}
+              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium"
+            >
+              取消
+            </button>
+            <button
+              onClick={executeMkdir}
+              className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium"
+            >
+              创建
+            </button>
+          </div>
+        }
+      >
+        <label className="block text-sm font-medium text-gray-700 mb-2">文件夹名称</label>
+        <input
+          value={mkdirName}
+          onChange={(e) => setMkdirName(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+          placeholder="例如：images"
+        />
+      </Modal>
+
+      <Modal
         open={renameOpen}
         title="重命名"
         description={selectedItem ? `当前：${selectedItem.name}` : undefined}
@@ -1810,12 +2081,18 @@ export default function R2Admin() {
       <Modal
         open={moveOpen}
         title={moveMode === "move" ? "移动" : "复制"}
-        description={selectedItem ? `对象：${selectedItem.key}` : undefined}
-        onClose={() => setMoveOpen(false)}
+        description={
+          moveSources.length > 1
+            ? `已选择 ${moveSources.length} 个文件`
+            : selectedItem
+              ? `对象：${selectedItem.key}`
+              : undefined
+        }
+        onClose={() => { setMoveOpen(false); setMoveSources([]); }}
         footer={
           <div className="flex justify-end gap-2">
             <button
-              onClick={() => setMoveOpen(false)}
+              onClick={() => { setMoveOpen(false); setMoveSources([]); }}
               className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium"
             >
               取消

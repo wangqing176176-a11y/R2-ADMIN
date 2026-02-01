@@ -23,13 +23,34 @@ export async function GET(req: NextRequest) {
       type: "folder" as const,
     }));
 
-    const files = (listed.objects ?? []).map((o: any) => ({
-      name: String(o.key).replace(prefix, ""),
-      key: o.key,
-      size: o.size,
-      lastModified: o.uploaded,
-      type: "file" as const,
-    }));
+    const folderKeys = new Set<string>((listed.delimitedPrefixes ?? []) as string[]);
+    const files = (listed.objects ?? [])
+      // Hide "folder marker" objects (e.g. `a/` with 0 size) from the file list.
+      .filter((o: any) => !(typeof o?.key === "string" && o.key.endsWith("/") && Number(o.size ?? 0) === 0))
+      .map((o: any) => ({
+        name: String(o.key).replace(prefix, ""),
+        key: o.key,
+        size: o.size,
+        lastModified: o.uploaded,
+        type: "file" as const,
+      }));
+
+    // If an empty-folder marker exists at this level, it might not appear in delimitedPrefixes consistently.
+    // Ensure folder markers show up as folders.
+    for (const o of listed.objects ?? []) {
+      const k = typeof o?.key === "string" ? (o.key as string) : "";
+      const size = Number(o?.size ?? 0);
+      if (!k || !k.startsWith(prefix) || !k.endsWith("/") || size !== 0) continue;
+      const rest = k.slice(prefix.length);
+      // Immediate child folder marker: "name/"
+      if (!rest) continue;
+      const inner = rest.endsWith("/") ? rest.slice(0, -1) : rest;
+      if (!inner || inner.includes("/")) continue;
+      if (!folderKeys.has(k)) {
+        folderKeys.add(k);
+        folders.push({ name: inner, key: k, type: "folder" as const });
+      }
+    }
 
     return NextResponse.json({ items: [...folders, ...files] });
   } catch (error: any) {

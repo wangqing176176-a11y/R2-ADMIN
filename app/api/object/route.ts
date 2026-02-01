@@ -56,10 +56,10 @@ export async function GET(req: NextRequest) {
 
     const { bucket } = getBucketById(bucketId);
 
-    // Head for size if we need it.
+    // Head for size/etag (helps browser show total size in download manager, enables Range parsing).
     let head: any = null;
     const rangeHeader = req.headers.get("range");
-    if (rangeHeader) head = await bucket.head(key);
+    if (rangeHeader || download) head = await bucket.head(key);
 
     const totalSize: number | null = head?.size ?? null;
     const range = parseRange(rangeHeader, totalSize);
@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
     const size = obj.size ?? head?.size;
     if (typeof size === "number") headers.set("Content-Length", String(size));
 
-    const etag = obj.httpEtag ?? obj.etag;
+    const etag = obj.httpEtag ?? obj.etag ?? head?.etag;
     if (etag) headers.set("ETag", etag);
 
     return new Response(obj.body, { status: 200, headers });

@@ -3,7 +3,7 @@ import { assertAdmin, getBucketById } from "@/lib/cf";
 
 export const runtime = "edge";
 
-type Operation = "move" | "copy" | "delete";
+type Operation = "move" | "copy" | "delete" | "mkdir" | "moveMany" | "copyMany";
 
 const listAllKeysWithPrefix = async (bucket: any, prefix: string) => {
   const keys: string[] = [];
@@ -38,19 +38,67 @@ export async function POST(req: NextRequest) {
   try {
     assertAdmin(req);
 
-    const { bucket: bucketId, sourceKey, targetKey, operation } = (await req.json()) as {
+    const { bucket: bucketId, sourceKey, sourceKeys, targetKey, targetPrefix, operation } = (await req.json()) as {
       bucket?: string;
       sourceKey?: string;
+      sourceKeys?: string[];
       targetKey?: string;
+      targetPrefix?: string;
       operation?: Operation;
     };
 
-    if (!bucketId || !sourceKey) return NextResponse.json({ error: "Missing params" }, { status: 400 });
+    if (!bucketId) return NextResponse.json({ error: "Missing params" }, { status: 400 });
 
     const op: Operation = operation ?? "move";
-    if (op !== "move" && op !== "copy" && op !== "delete") return NextResponse.json({ error: "Invalid operation" }, { status: 400 });
+    if (op !== "move" && op !== "copy" && op !== "delete" && op !== "mkdir" && op !== "moveMany" && op !== "copyMany")
+      return NextResponse.json({ error: "Invalid operation" }, { status: 400 });
 
     const { bucket } = getBucketById(bucketId);
+
+    if (op === "mkdir") {
+      if (!targetKey) return NextResponse.json({ error: "Missing params" }, { status: 400 });
+      const key = targetKey.endsWith("/") ? targetKey : `${targetKey}/`;
+      // Create a zero-byte "folder marker" object.
+      await bucket.put(key, new Uint8Array(0), { httpMetadata: { contentType: "application/x-directory" } });
+      return NextResponse.json({ success: true });
+    }
+
+    if (op === "moveMany" || op === "copyMany") {
+      const keys = (sourceKeys ?? []).filter((k) => typeof k === "string" && k.length > 0);
+      if (!keys.length) return NextResponse.json({ error: "Missing params" }, { status: 400 });
+      if (!targetPrefix) return NextResponse.json({ error: "Missing params" }, { status: 400 });
+
+      let destPrefix = String(targetPrefix).trim();
+      if (destPrefix.startsWith("/")) destPrefix = destPrefix.slice(1);
+      if (destPrefix && !destPrefix.endsWith("/")) destPrefix += "/";
+
+      let moved = 0;
+      for (const k of keys) {
+        const isPrefix = k.endsWith("/");
+        if (!isPrefix) {
+          const base = k.split("/").pop() || k;
+          const dest = `${destPrefix}${base}`;
+          await copyObject(bucket, k, dest);
+          if (op === "moveMany") await bucket.delete(k);
+          moved += 1;
+          continue;
+        }
+
+        const folderName = k.split("/").filter(Boolean).pop() || "folder";
+        const destRoot = `${destPrefix}${folderName}/`;
+        const all = await listAllKeysWithPrefix(bucket, k);
+        for (const src of all) {
+          const dest = destRoot + src.slice(k.length);
+          await copyObject(bucket, src, dest);
+        }
+        if (op === "moveMany") await deleteKeys(bucket, all);
+        moved += all.length;
+      }
+
+      return NextResponse.json({ success: true, count: moved });
+    }
+
+    if (!sourceKey) return NextResponse.json({ error: "Missing params" }, { status: 400 });
 
     const isPrefix = sourceKey.endsWith("/");
 
