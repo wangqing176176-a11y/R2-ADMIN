@@ -1487,7 +1487,7 @@ export default function R2Admin() {
                   className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <label htmlFor="remember" className="ml-2 text-sm text-gray-600">
-                  在本地记住密码
+                  记住登陆状态
                 </label>
               </div>
 
@@ -1499,7 +1499,8 @@ export default function R2Admin() {
                 进入管理
               </button>
               <div className="text-xs text-gray-500 text-center pt-2">
-                本站使用 Cloudflare Pages 绑定的 R2 存储桶进行管理；如设置了 ADMIN_PASSWORD，将要求输入访问密码。
+                本站使用 Cloudflare Pages 绑定的 R2 存储桶进行管理；
+                管理员设置了 ADMIN_PASSWORD，将要求输入管理账号和管理密码以验证。
               </div>
             </form>
           </section>

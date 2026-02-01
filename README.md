@@ -1,36 +1,119 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Qing's R2 Admin
 
-## Getting Started
+一个部署在 **Cloudflare Pages** 上的 **Cloudflare R2 管理面板**：不需要自建服务器，使用 Pages Functions + R2 绑定实现桶内文件的查看、上传、预览、下载与批量操作。
 
-First, run the development server:
+> 推荐用法：每个人 fork 本仓库 → 部署到自己的 Cloudflare Pages → 绑定自己的 R2 桶，即可管理自己的文件。
+
+---
+
+## 功能
+
+- 多桶切换（Pages 绑定多个 R2 存储桶）
+- 文件与文件夹浏览（支持“空文件夹”）
+- 大文件分片上传（multipart），支持**暂停 / 继续续传 / 取消**
+- 预览：图片 / 音频 / 视频（Range）/ PDF / Office 在线预览
+- 文件操作：下载 / 重命名 / 移动
+- 批量：下载、移动（按勾选）
+- 全局搜索（当前桶内扫描匹配）
+- 可选访问密码：设置 `ADMIN_PASSWORD` 后启用登录页与 API 鉴权
+
+---
+
+## 部署到 Cloudflare Pages（推荐）
+
+### 1) Fork 仓库并创建 Pages 项目
+
+在 Cloudflare Dashboard：
+1. Pages → 创建项目 → 连接 GitHub 仓库
+2. 选择本仓库（或你的 fork）
+
+### 2) 构建配置
+
+- 构建命令：`npx @cloudflare/next-on-pages@1`
+- 构建输出目录：`.vercel/output/static`
+
+### 3) Functions 兼容性标志
+
+Pages → 设置 → 函数 → 兼容性标志：
+- 添加：`nodejs_compat`（建议生产/预览都加）
+
+### 4) 绑定 R2 存储桶（核心）
+
+Pages → 设置 → 函数 → 绑定 → 添加：
+- 类型：R2 存储桶
+- 绑定名称：建议英文且以 `R2_` 开头（例如 `R2_BLOG`、`R2_CLOUD`）
+- 选择你的 R2 桶
+
+绑定完成后重新部署一次，页面就会显示桶列表并可操作文件。
+
+---
+
+## 环境变量（可选）
+
+Pages → 设置 → 环境变量（建议用“密钥”保存敏感值）：
+
+### `ADMIN_PASSWORD`（密钥 / 推荐）
+
+开启访问登录与接口鉴权。
+
+- 未设置：打开站点直接进入（任何人都能操作你绑定的桶）
+- 已设置：打开站点先出现“访问登录”页，输入密码后才能进入管理
+
+### `R2_BUCKETS`（文本 / 可选）
+
+用于自定义桶显示名与顺序（也可避免误识别）。
+
+支持两种格式：
+- CSV：`R2_BLOG:博客,R2_CLOUD:云盘`
+- JSON：`{"R2_BLOG":"博客","R2_CLOUD":"云盘"}`
+
+### `ADMIN_TOKEN_SECRET`（密钥 / 高级）
+
+用于签发预览/下载/上传的短期 token（不想依赖 `ADMIN_PASSWORD` 时可单独设置）。
+
+---
+
+## 本地开发
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+打开 `http://localhost:3000`。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+> 本项目的核心能力来自 Cloudflare Pages 的 R2 绑定；本地开发时如果没有对应环境，部分功能需要在 Pages 环境验证。
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## 安全说明（重要）
 
-To learn more about Next.js, take a look at the following resources:
+- 本项目基于 **Pages 绑定桶** 管理文件：谁部署、谁绑定、谁就拥有对绑定桶的读写权限。
+- 强烈建议设置 `ADMIN_PASSWORD`（并使用“密钥”类型保存）。
+- 勾选“在本地记住密码”会把密码存到浏览器 localStorage；公用电脑不要勾选，用完点击“退出登录”。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 已知限制 / 说明
 
-## Deploy on Vercel
+- “全局搜索”通过扫描 `list` 结果匹配，桶很大时可能较慢。
+- 文件夹移动/复制在 R2 侧没有原生“目录”概念，内部实现为遍历 key 并逐个拷贝/删除。
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Qing's R2 Admin (English)
+
+A Cloudflare Pages + R2 bindings based admin panel. No custom server required. Fork → deploy to your own Pages → bind your R2 buckets → manage your files.
+
+## Quick Deploy (Cloudflare Pages)
+
+- Build command: `npx @cloudflare/next-on-pages@1`
+- Output directory: `.vercel/output/static`
+- Compatibility flags: `nodejs_compat`
+- Bindings: Pages → Settings → Functions → Bindings → R2 bucket (recommend binding names starting with `R2_`)
+
+## Optional Env Vars
+
+- `ADMIN_PASSWORD` (secret): enable login + API auth
+- `R2_BUCKETS` (text): bucket display names (CSV or JSON)
+- `ADMIN_TOKEN_SECRET` (secret): token signing secret for preview/download/upload URLs
