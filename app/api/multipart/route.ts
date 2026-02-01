@@ -1,84 +1,97 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ensureDomParser } from "@/lib/edge-polyfills";
-import {
-  AbortMultipartUploadCommand,
-  CompleteMultipartUploadCommand,
-  CreateMultipartUploadCommand,
-  UploadPartCommand,
-} from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { getR2Client } from "@/lib/r2";
-import { getAuthFromHeaders } from "@/utils/auth";
+import { assertAdmin, getBucketById } from "@/lib/cf";
 
 export const runtime = "edge";
 
 type Action = "create" | "signPart" | "complete" | "abort";
 
 export async function POST(req: NextRequest) {
-  ensureDomParser();
   try {
+    assertAdmin(req);
+
     const body = (await req.json()) as Record<string, unknown>;
     const action = body.action as Action | undefined;
     if (!action) return NextResponse.json({ error: "Missing action" }, { status: 400 });
 
-    const { accountId, accessKeyId, secretAccessKey } = getAuthFromHeaders(req);
-    const r2 = getR2Client(accountId, accessKeyId, secretAccessKey);
+    const bucketId = body.bucket as string | undefined;
+    const key = body.key as string | undefined;
+
+    if (!bucketId || !key) return NextResponse.json({ error: "Missing params" }, { status: 400 });
+
+    const { bucket } = getBucketById(bucketId);
 
     if (action === "create") {
-      const bucket = body.bucket as string | undefined;
-      const key = body.key as string | undefined;
       const contentType = body.contentType as string | undefined;
-      if (!bucket || !key) return NextResponse.json({ error: "Missing params" }, { status: 400 });
-
-      const data = await r2.send(new CreateMultipartUploadCommand({ Bucket: bucket, Key: key, ContentType: contentType }));
-      return NextResponse.json({ uploadId: data.UploadId });
+      const upload = await bucket.createMultipartUpload(key, {
+        httpMetadata: contentType ? { contentType } : undefined,
+      });
+      return NextResponse.json({ uploadId: upload.uploadId });
     }
 
     if (action === "signPart") {
-      const bucket = body.bucket as string | undefined;
-      const key = body.key as string | undefined;
       const uploadId = body.uploadId as string | undefined;
       const partNumber = body.partNumber as number | undefined;
-      if (!bucket || !key || !uploadId || !partNumber) return NextResponse.json({ error: "Missing params" }, { status: 400 });
+      if (!uploadId || !partNumber) return NextResponse.json({ error: "Missing params" }, { status: 400 });
 
-      const command = new UploadPartCommand({ Bucket: bucket, Key: key, UploadId: uploadId, PartNumber: partNumber });
-      const url = await getSignedUrl(r2, command, { expiresIn: 3600 });
+      const url = `/api/multipart?bucket=${encodeURIComponent(bucketId)}&key=${encodeURIComponent(key)}&uploadId=${encodeURIComponent(uploadId)}&partNumber=${encodeURIComponent(
+        String(partNumber),
+      )}`;
       return NextResponse.json({ url });
     }
 
     if (action === "complete") {
-      const bucket = body.bucket as string | undefined;
-      const key = body.key as string | undefined;
       const uploadId = body.uploadId as string | undefined;
       const parts = body.parts as Array<{ etag: string; partNumber: number }> | undefined;
-      if (!bucket || !key || !uploadId || !parts?.length) return NextResponse.json({ error: "Missing params" }, { status: 400 });
+      if (!uploadId || !parts?.length) return NextResponse.json({ error: "Missing params" }, { status: 400 });
 
-      const data = await r2.send(
-        new CompleteMultipartUploadCommand({
-          Bucket: bucket,
-          Key: key,
-          UploadId: uploadId,
-          MultipartUpload: {
-            Parts: parts.map((p) => ({ ETag: p.etag, PartNumber: p.partNumber })),
-          },
-        }),
-      );
-      return NextResponse.json({ ok: true, location: data.Location ?? null });
+      const upload = bucket.resumeMultipartUpload(key, uploadId);
+      await upload.complete(parts);
+      return NextResponse.json({ ok: true });
     }
 
     if (action === "abort") {
-      const bucket = body.bucket as string | undefined;
-      const key = body.key as string | undefined;
       const uploadId = body.uploadId as string | undefined;
-      if (!bucket || !key || !uploadId) return NextResponse.json({ error: "Missing params" }, { status: 400 });
+      if (!uploadId) return NextResponse.json({ error: "Missing params" }, { status: 400 });
 
-      await r2.send(new AbortMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId }));
+      const upload = bucket.resumeMultipartUpload(key, uploadId);
+      await upload.abort();
       return NextResponse.json({ ok: true });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
-  } catch (error: unknown) {
+  } catch (error: any) {
+    const status = typeof error?.status === "number" ? error.status : 500;
     const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+// 上传分片 (PUT)
+export async function PUT(req: NextRequest) {
+  try {
+    assertAdmin(req);
+
+    const { searchParams } = new URL(req.url);
+    const bucketId = searchParams.get("bucket");
+    const key = searchParams.get("key");
+    const uploadId = searchParams.get("uploadId");
+    const partNumberStr = searchParams.get("partNumber");
+
+    const partNumber = partNumberStr ? Number.parseInt(partNumberStr, 10) : NaN;
+    if (!bucketId || !key || !uploadId || !Number.isFinite(partNumber) || partNumber <= 0) {
+      return new Response(JSON.stringify({ error: "Missing params" }), { status: 400, headers: { "Content-Type": "application/json" } });
+    }
+
+    const { bucket } = getBucketById(bucketId);
+    const upload = bucket.resumeMultipartUpload(key, uploadId);
+    const res = await upload.uploadPart(partNumber, req.body);
+
+    const headers = new Headers();
+    if (res?.etag) headers.set("ETag", res.etag);
+    return new Response(null, { status: 200, headers });
+  } catch (error: any) {
+    const status = typeof error?.status === "number" ? error.status : 500;
+    const message = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ error: message }), { status, headers: { "Content-Type": "application/json" } });
   }
 }

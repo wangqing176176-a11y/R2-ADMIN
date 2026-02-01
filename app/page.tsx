@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 // --- 类型定义 ---
-type Bucket = { Name: string; CreationDate: string };
+type Bucket = { id: string; Name: string; CreationDate: string };
 type FileItem = {
   name: string;
   key: string;
@@ -22,11 +22,7 @@ type FileItem = {
   size?: number;
   lastModified?: string;
 };
-type Credentials = {
-  accountId: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-};
+type AdminAuth = { password: string };
 type BucketUsage = {
   bucket: string;
   prefix: string;
@@ -107,13 +103,14 @@ const LOGIN_LINKS = [
 
 export default function R2Admin() {
   // --- 状态管理 ---
-  const [credentials, setCredentials] = useState<Credentials | null>(null);
+  const [auth, setAuth] = useState<AdminAuth | null>(null);
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [path, setPath] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"checking" | "connected" | "error">("checking");
+  const [authRequired, setAuthRequired] = useState(false);
   const [bucketUsage, setBucketUsage] = useState<BucketUsage | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
   const [accountUsage, setAccountUsage] = useState<AccountUsage | null>(null);
@@ -158,23 +155,15 @@ export default function R2Admin() {
   }, [uploadQueuePaused]);
 
   // 登录表单状态
-  const [formAccountId, setFormAccountId] = useState("");
-  const [formAccessKeyId, setFormAccessKeyId] = useState("");
-  const [formSecretAccessKey, setFormSecretAccessKey] = useState("");
+  const [formPassword, setFormPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
 
   // --- 初始化 ---
   useEffect(() => {
-    const stored = localStorage.getItem("r2_credentials");
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setCredentials(parsed);
-      } catch {
-        localStorage.removeItem("r2_credentials");
-      }
-    }
+    const stored = localStorage.getItem("admin_password");
+    if (stored) setAuth({ password: stored });
+
     const storedLinks = localStorage.getItem("r2_link_config_v1");
     if (storedLinks) {
       try {
@@ -192,45 +181,57 @@ export default function R2Admin() {
   }, [toast]);
 
   useEffect(() => {
-    if (credentials) {
-      fetchBuckets();
-    }
-  }, [credentials]);
+    fetchBuckets();
+  }, [auth]);
 
   // --- 核心：带鉴权的 Fetch ---
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
-    if (!credentials) throw new Error("No credentials");
-    
-    const headers = {
-      ...options.headers,
-      "x-r2-account-id": credentials.accountId,
-      "x-r2-access-key-id": credentials.accessKeyId,
-      "x-r2-secret-access-key": credentials.secretAccessKey,
+    const headers: Record<string, string> = {
+      ...(options.headers as Record<string, string> | undefined),
     };
-
+    if (!headers["content-type"] && typeof options.body === "string") headers["content-type"] = "application/json";
+    if (auth?.password) headers["x-admin-password"] = auth.password;
     return fetch(url, { ...options, headers });
   };
 
-  // --- 登录逻辑 ---
-  const handleLogin = (e: React.FormEvent) => {
+  // --- 登录逻辑（可选 ADMIN_PASSWORD） ---
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formAccountId || !formAccessKeyId || !formSecretAccessKey) {
-      setToast("请填写所有字段");
-      return;
-    }
-    const creds = {
-      accountId: formAccountId,
-      accessKeyId: formAccessKeyId,
-      secretAccessKey: formSecretAccessKey
-    };
-    setCredentials(creds);
-    if (rememberMe) {
-      localStorage.setItem("r2_credentials", JSON.stringify(creds));
+    const pw = formPassword.trim();
+    const nextAuth: AdminAuth | null = pw ? { password: pw } : null;
+
+    try {
+      setLoading(true);
+      const res = await fetch("/api/buckets", {
+        headers: nextAuth?.password ? { "x-admin-password": nextAuth.password } : undefined,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        setToast("密码错误");
+        return;
+      }
+      if (!res.ok) throw new Error(data.error || "Failed");
+
+      setAuth(nextAuth);
+      if (rememberMe) {
+        if (nextAuth?.password) localStorage.setItem("admin_password", nextAuth.password);
+        else localStorage.removeItem("admin_password");
+      }
+      setAuthRequired(false);
+      setBuckets(data.buckets || []);
+      if (!selectedBucket && data.buckets?.length) setSelectedBucket(data.buckets[0].id);
+      setConnectionStatus("connected");
+      setToast("已解锁");
+    } catch {
+      setToast("解锁失败");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleLogout = () => {
-    setCredentials(null);
+    localStorage.removeItem("admin_password");
+    setAuth(null);
     setBuckets([]);
     setSelectedBucket(null);
     setBucketUsage(null);
@@ -245,7 +246,10 @@ export default function R2Admin() {
     setMoveOpen(false);
     setLinkOpen(false);
     setDeleteOpen(false);
-    localStorage.removeItem("r2_credentials");
+    setAuthRequired(false);
+    setConnectionStatus("checking");
+    setToast("已锁定");
+    setTimeout(() => fetchBuckets(), 0);
   };
 
   // --- API 调用 ---
@@ -253,12 +257,20 @@ export default function R2Admin() {
     setConnectionStatus("checking");
     try {
       const res = await fetchWithAuth("/api/buckets");
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 401) {
+        setAuthRequired(true);
+        setConnectionStatus("error");
+        return;
+      }
+
       if (res.ok && data.buckets) {
+        setAuthRequired(false);
         setBuckets(data.buckets);
         setConnectionStatus("connected");
         if (data.buckets.length > 0 && !selectedBucket) {
-          setSelectedBucket(data.buckets[0].Name);
+          setSelectedBucket(data.buckets[0].id);
         }
       } else {
         setConnectionStatus("error");
@@ -275,7 +287,7 @@ export default function R2Admin() {
     setLoading(true);
     const prefix = currentPath.length > 0 ? currentPath.join("/") + "/" : "";
     try {
-      const res = await fetchWithAuth(`/api/files?bucket=${bucketName}&prefix=${encodeURIComponent(prefix)}`);
+      const res = await fetchWithAuth(`/api/files?bucket=${encodeURIComponent(bucketName)}&prefix=${encodeURIComponent(prefix)}`);
       const data = await res.json();
       setFiles(data.items || []);
     } catch (e) {
@@ -300,18 +312,18 @@ export default function R2Admin() {
   };
 
   useEffect(() => {
-    if (selectedBucket && credentials) {
+    if (selectedBucket) {
       fetchFiles(selectedBucket, path);
       setSelectedItem(null);
       setSelectedKeys(new Set());
     }
-  }, [selectedBucket, path, credentials]);
+  }, [selectedBucket, path, auth]);
 
   useEffect(() => {
-    if (selectedBucket && credentials) {
+    if (selectedBucket) {
       fetchBucketUsage(selectedBucket);
     }
-  }, [selectedBucket, credentials]);
+  }, [selectedBucket, auth]);
 
   const fetchAccountUsageTotal = async (bucketList: Bucket[]) => {
     if (!bucketList.length) {
@@ -351,12 +363,12 @@ export default function R2Admin() {
   };
 
   useEffect(() => {
-    if (credentials && buckets.length) {
+    if (buckets.length) {
       fetchAccountUsageTotal(buckets);
     } else {
       setAccountUsage(null);
     }
-  }, [credentials, buckets]);
+  }, [buckets, auth]);
 
   const persistLinkConfigMap = (next: LinkConfigMap) => {
     setLinkConfigMap(next);
@@ -986,7 +998,7 @@ export default function R2Admin() {
   };
 
   // --- 渲染：登录界面 ---
-  if (!credentials) {
+  if (authRequired) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 flex items-center justify-center p-6 font-sans">
         <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
@@ -1084,37 +1096,14 @@ export default function R2Admin() {
 
             <form onSubmit={handleLogin} className="px-8 pb-8 pt-4 space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">账户 ID (Account ID)</label>
-                <input
-                  type="text"
-                  required
-                  value={formAccountId}
-                  onChange={(e) => setFormAccountId(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                  placeholder="请输入 Cloudflare 账户 ID"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">访问密钥 ID (Access Key ID)</label>
-                <input
-                  type="text"
-                  required
-                  value={formAccessKeyId}
-                  onChange={(e) => setFormAccessKeyId(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                  placeholder="请输入 R2 Access Key ID"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">机密访问密钥 (Secret Access Key)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">管理密码（可选）</label>
                 <div className="relative">
                   <input
                     type={showSecret ? "text" : "password"}
-                    required
-                    value={formSecretAccessKey}
-                    onChange={(e) => setFormSecretAccessKey(e.target.value)}
+                    value={formPassword}
+                    onChange={(e) => setFormPassword(e.target.value)}
                     className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all pr-10"
-                    placeholder="请输入 R2 Secret Access Key"
+                    placeholder="如未设置 ADMIN_PASSWORD，可留空"
                   />
                   <button
                     type="button"
@@ -1135,7 +1124,7 @@ export default function R2Admin() {
                   className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <label htmlFor="remember" className="ml-2 text-sm text-gray-600">
-                  在本地记住密钥信息
+                  在本地记住密码
                 </label>
               </div>
 
@@ -1144,10 +1133,10 @@ export default function R2Admin() {
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2"
               >
                 <ShieldCheck className="w-4 h-4" />
-                连接 R2
+                进入管理
               </button>
               <div className="text-xs text-gray-500 text-center pt-2">
-                您的密钥仅保存在本地浏览器中，并通过安全接口直接发送至 Cloudflare。
+                本站使用 Cloudflare Pages 绑定的 R2 存储桶进行管理；如设置了 ADMIN_PASSWORD，将要求输入密码。
               </div>
             </form>
           </section>

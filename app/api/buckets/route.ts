@@ -1,27 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ensureDomParser } from "@/lib/edge-polyfills";
-import { ListBucketsCommand } from "@aws-sdk/client-s3";
-import { getR2Client } from "@/lib/r2";
-import { getAuthFromHeaders } from "@/utils/auth";
+import { assertAdmin, listBoundBuckets } from "@/lib/cf";
 
 export const runtime = "edge";
 
 export async function GET(req: NextRequest) {
-  ensureDomParser();
   try {
-    const { accountId, accessKeyId, secretAccessKey } = getAuthFromHeaders(req);
-    const r2 = getR2Client(accountId, accessKeyId, secretAccessKey);
-
-    const data = await r2.send(new ListBucketsCommand({}));
-    const buckets =
-      data.Buckets?.map((b) => ({
-        Name: b.Name ?? "",
-        CreationDate: b.CreationDate?.toISOString?.() ?? "",
-      })) ?? [];
-
+    assertAdmin(req);
+    const buckets = listBoundBuckets().map((b) => ({ id: b.id, Name: b.name, CreationDate: "" }));
     return NextResponse.json({ buckets });
-  } catch (error: unknown) {
+  } catch (error: any) {
+    const status = typeof error?.status === "number" ? error.status : 500;
     const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status });
   }
 }
