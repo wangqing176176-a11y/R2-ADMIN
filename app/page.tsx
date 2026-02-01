@@ -1786,10 +1786,10 @@ export default function R2Admin() {
                     <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">绑定步骤（中文界面）</div>
                     <ol className="mt-3 space-y-2 text-sm text-gray-700 list-decimal pl-5">
                       <li>进入 Cloudflare Pages 项目</li>
-                      <li>点击「设置」→「函数」</li>
-                      <li>在「绑定」中选择「R2 存储桶」→「添加」</li>
-                      <li>填写绑定名称（建议英文）并选择你的桶</li>
-                      <li>保存后重新部署（或点击上方“重新检测”）</li>
+                      <li>点击「设置」→「绑定」</li>
+                      <li>点击「添加」中选择「R2 存储桶」</li>
+                      <li>填写绑定名称（R2_）并选择你的桶</li>
+                      <li>保存后重新部署，等待部署成功刷新即可。</li>
                     </ol>
                   </div>
 
