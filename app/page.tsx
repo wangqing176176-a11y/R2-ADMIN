@@ -8,7 +8,7 @@ import {
   FileText, Image as ImageIcon, Music, Video, Edit2,
   FileArchive, FileCode, FileSpreadsheet, FileType, FileJson,
   LogOut, ShieldCheck, Eye, EyeOff,
-  LayoutGrid, List as ListIcon, Download, Link2, Copy, ArrowRightLeft, FolderOpen, Settings, X,
+  Download, Link2, Copy, ArrowRightLeft, FolderOpen, Settings, X,
   Pause, Play, CircleX,
   Globe, BadgeInfo, Mail, BookOpen,
   FolderPlus,
@@ -56,11 +56,18 @@ type PreviewState =
 type PreviewKind = NonNullable<PreviewState>["kind"];
 
 type UploadStatus = "queued" | "uploading" | "paused" | "done" | "error" | "canceled";
+type MultipartUploadState = {
+  uploadId: string;
+  partSize: number;
+  parts: Record<string, string>; // partNumber -> etag
+};
 type UploadTask = {
   id: string;
   bucket: string;
   file: File;
   key: string;
+  resumeKey?: string;
+  multipart?: MultipartUploadState;
   startedAt?: number;
   loaded: number;
   speedBps: number;
@@ -102,6 +109,56 @@ const LOGIN_LINKS = [
   { label: "电子邮箱", href: "mailto:wangqing176176@gmail.com", icon: "mail" as const },
 ] as const;
 
+type MultipartResumeRecord = {
+  bucket: string;
+  key: string;
+  size: number;
+  lastModified: number;
+  name: string;
+  uploadId: string;
+  partSize: number;
+  parts: Record<string, string>; // partNumber -> etag
+};
+
+const RESUME_STORE_KEY = "r2_multipart_resume_v1";
+
+const getResumeKey = (bucket: string, key: string, file: File) =>
+  `${bucket}|${key}|${file.size}|${file.lastModified}`;
+
+const loadResumeStore = (): Record<string, MultipartResumeRecord> => {
+  try {
+    const raw = localStorage.getItem(RESUME_STORE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, MultipartResumeRecord>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveResumeStore = (next: Record<string, MultipartResumeRecord>) => {
+  localStorage.setItem(RESUME_STORE_KEY, JSON.stringify(next));
+};
+
+const loadResumeRecord = (resumeKey: string): MultipartResumeRecord | null => {
+  const store = loadResumeStore();
+  const rec = store[resumeKey];
+  return rec && typeof rec === "object" ? rec : null;
+};
+
+const upsertResumeRecord = (resumeKey: string, rec: MultipartResumeRecord) => {
+  const store = loadResumeStore();
+  store[resumeKey] = rec;
+  saveResumeStore(store);
+};
+
+const deleteResumeRecord = (resumeKey: string) => {
+  const store = loadResumeStore();
+  if (!(resumeKey in store)) return;
+  delete store[resumeKey];
+  saveResumeStore(store);
+};
+
 export default function R2Admin() {
   // --- 状态管理 ---
   const [auth, setAuth] = useState<AdminAuth | null>(null);
@@ -118,7 +175,6 @@ export default function R2Admin() {
   const [accountUsage, setAccountUsage] = useState<AccountUsage | null>(null);
   const [accountUsageLoading, setAccountUsageLoading] = useState(false);
   const [selectedItem, setSelectedItem] = useState<FileItem | null>(null);
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [preview, setPreview] = useState<PreviewState>(null);
   const [uploadPanelOpen, setUploadPanelOpen] = useState(false);
@@ -926,6 +982,7 @@ export default function R2Admin() {
   };
 
   const uploadSingleFile = async (
+    _taskId: string,
     bucket: string,
     key: string,
     file: File,
@@ -942,20 +999,13 @@ export default function R2Admin() {
   };
 
   const uploadMultipartFile = async (
+    taskId: string,
     bucket: string,
     key: string,
     file: File,
     onLoaded: (loaded: number) => void,
     signal?: AbortSignal,
   ) => {
-    const createRes = await fetchWithAuth("/api/multipart", {
-      method: "POST",
-      body: JSON.stringify({ action: "create", bucket, key, contentType: file.type }),
-    });
-    const createData = await createRes.json();
-    if (!createRes.ok || !createData.uploadId) throw new Error(createData.error || "create multipart failed");
-    const uploadId = createData.uploadId as string;
-
     // R2 multipart parts should be >= 5MiB (except the last part). Choose a part size that
     // yields a few parts even for medium files, so we can upload parts in parallel and improve
     // throughput on networks where a single connection is slow.
@@ -970,16 +1020,61 @@ export default function R2Admin() {
       return Math.ceil(clamped / MiB) * MiB;
     };
 
-    const partSize = pickPartSize(file.size);
+    const resumeKey = getResumeKey(bucket, key, file);
+    const existingTask = uploadTasksRef.current.find((t) => t.id === taskId);
+    const existing = existingTask?.multipart;
+    const persisted = loadResumeRecord(resumeKey);
+
+    let uploadId: string | null = existing?.uploadId ?? persisted?.uploadId ?? null;
+    let partSize = existing?.partSize ?? persisted?.partSize ?? pickPartSize(file.size);
+    let partsMap: Record<string, string> = existing?.parts ?? persisted?.parts ?? {};
+
+    // If the persisted record doesn't match the file, ignore it.
+    if (persisted && (persisted.size !== file.size || persisted.lastModified !== file.lastModified)) {
+      uploadId = existing?.uploadId ?? null;
+      partsMap = existing?.parts ?? {};
+      deleteResumeRecord(resumeKey);
+    }
+
+    if (!uploadId) {
+      const createRes = await fetchWithAuth("/api/multipart", {
+        method: "POST",
+        body: JSON.stringify({ action: "create", bucket, key, contentType: file.type }),
+      });
+      const createData = await createRes.json();
+      if (!createRes.ok || !createData.uploadId) throw new Error(createData.error || "create multipart failed");
+      uploadId = createData.uploadId as string;
+      partsMap = {};
+      partSize = pickPartSize(file.size);
+    }
+
+    updateUploadTask(taskId, (t) => ({
+      ...t,
+      resumeKey,
+      multipart: { uploadId: uploadId as string, partSize, parts: partsMap },
+    }));
+
+    upsertResumeRecord(resumeKey, {
+      bucket,
+      key,
+      size: file.size,
+      lastModified: file.lastModified,
+      name: file.name,
+      uploadId: uploadId as string,
+      partSize,
+      parts: partsMap,
+    });
+
     const partCount = Math.ceil(file.size / partSize);
     const partLoaded = new Map<number, number>();
-    const parts: Array<{ etag: string; partNumber: number }> = [];
 
     const concurrency = Math.min(6, partCount);
     let nextPart = 1;
     let aborted = false;
 
     const uploadPart = async (partNumber: number) => {
+      // Skip uploaded parts (resume).
+      if (partsMap[String(partNumber)]) return;
       const start = (partNumber - 1) * partSize;
       const end = Math.min(file.size, start + partSize);
       const blob = file.slice(start, end);
@@ -991,14 +1086,39 @@ export default function R2Admin() {
       const signData = await signRes.json();
       if (!signRes.ok || !signData.url) throw new Error(signData.error || "sign part failed");
 
+      const completedBytes = Object.keys(partsMap).reduce((acc, pn) => {
+        const n = Number.parseInt(pn, 10);
+        if (!Number.isFinite(n) || n <= 0) return acc;
+        const s = (n - 1) * partSize;
+        const e = Math.min(file.size, s + partSize);
+        return acc + Math.max(0, e - s);
+      }, 0);
+
       const { etag } = await xhrPut(signData.url, blob, file.type, (loaded, total) => {
         partLoaded.set(partNumber, loaded);
         const sumLoaded = Array.from(partLoaded.values()).reduce((a, b) => a + b, 0);
-        onLoaded(sumLoaded);
+        onLoaded(Math.min(file.size, completedBytes + sumLoaded));
         if (loaded === total) partLoaded.set(partNumber, total);
       }, signal);
       if (!etag) throw new Error("Missing ETag");
-      parts.push({ etag, partNumber });
+      partsMap[String(partNumber)] = etag;
+
+      updateUploadTask(taskId, (t) =>
+        t.multipart
+          ? { ...t, multipart: { ...t.multipart, parts: { ...t.multipart.parts, [String(partNumber)]: etag } } }
+          : t,
+      );
+
+      upsertResumeRecord(resumeKey, {
+        bucket,
+        key,
+        size: file.size,
+        lastModified: file.lastModified,
+        name: file.name,
+        uploadId: uploadId as string,
+        partSize,
+        parts: partsMap,
+      });
     };
 
     const worker = async () => {
@@ -1012,19 +1132,33 @@ export default function R2Admin() {
 
     try {
       await Promise.all(Array.from({ length: Math.min(concurrency, partCount) }, worker));
-      parts.sort((a, b) => a.partNumber - b.partNumber);
+      const parts = Object.entries(partsMap)
+        .map(([pn, etag]) => ({ partNumber: Number.parseInt(pn, 10), etag }))
+        .filter((p) => Number.isFinite(p.partNumber) && p.partNumber > 0)
+        .sort((a, b) => a.partNumber - b.partNumber);
       const completeRes = await fetchWithAuth("/api/multipart", {
         method: "POST",
         body: JSON.stringify({ action: "complete", bucket, key, uploadId, parts }),
       });
       const completeData = await completeRes.json();
       if (!completeRes.ok) throw new Error(completeData.error || "complete failed");
+      deleteResumeRecord(resumeKey);
     } catch (err) {
       aborted = true;
-      await fetchWithAuth("/api/multipart", {
-        method: "POST",
-        body: JSON.stringify({ action: "abort", bucket, key, uploadId }),
-      }).catch(() => {});
+      const current = uploadTasksRef.current.find((t) => t.id === taskId);
+      const status = current?.status;
+      const abortedByUser = signal?.aborted === true;
+      if (abortedByUser && status === "paused") {
+        // Keep uploadId/parts for resume.
+      } else if (abortedByUser && status === "canceled") {
+        await fetchWithAuth("/api/multipart", {
+          method: "POST",
+          body: JSON.stringify({ action: "abort", bucket, key, uploadId }),
+        }).catch(() => {});
+        deleteResumeRecord(resumeKey);
+      } else {
+        // Keep resume record on transient errors; user can retry/resume.
+      }
       throw err;
     }
   };
@@ -1039,14 +1173,14 @@ export default function R2Admin() {
     );
     setUploadQueuePaused(true);
     uploadControllersRef.current.get(id)?.abort();
-    setToast("已暂停（再次开始将重新上传）");
+    setToast("已暂停（可继续续传）");
   };
 
   const resumeUploadTask = (id: string) => {
     setUploadTasks((prev) =>
       prev.map((t) =>
         t.id === id && (t.status === "paused" || t.status === "error")
-          ? { ...t, status: "queued", loaded: 0, speedBps: 0, startedAt: undefined, error: undefined }
+          ? { ...t, status: "queued", speedBps: 0, startedAt: undefined, error: undefined }
           : t,
       ),
     );
@@ -1054,11 +1188,27 @@ export default function R2Admin() {
     setTimeout(() => processUploadQueue(), 0);
   };
 
+  const abortMultipartForTask = async (taskId: string) => {
+    const t = uploadTasksRef.current.find((x) => x.id === taskId);
+    if (!t?.multipart?.uploadId) return;
+    try {
+      await fetchWithAuth("/api/multipart", {
+        method: "POST",
+        body: JSON.stringify({ action: "abort", bucket: t.bucket, key: t.key, uploadId: t.multipart.uploadId }),
+      });
+    } catch {
+      // ignore
+    } finally {
+      if (t.resumeKey) deleteResumeRecord(t.resumeKey);
+    }
+  };
+
   const cancelUploadTask = (id: string) => {
     setUploadTasks((prev) =>
       prev.map((t) => (t.id === id && (t.status === "queued" || t.status === "uploading" || t.status === "paused") ? { ...t, status: "canceled", speedBps: 0 } : t)),
     );
     uploadControllersRef.current.get(id)?.abort();
+    void abortMultipartForTask(id);
     setToast("已取消");
   };
 
@@ -1079,7 +1229,7 @@ export default function R2Admin() {
           ...t,
           status: "uploading",
           startedAt: performance.now(),
-          loaded: 0,
+          loaded: typeof t.loaded === "number" && t.loaded > 0 ? t.loaded : 0,
           speedBps: 0,
           error: undefined,
         }));
@@ -1090,10 +1240,10 @@ export default function R2Admin() {
         const uploadFn = next.file.size >= threshold ? uploadMultipartFile : uploadSingleFile;
 
         let lastAt = performance.now();
-        let lastLoaded = 0;
+        let lastLoaded = next.loaded ?? 0;
 
         try {
-          await uploadFn(next.bucket, next.key, next.file, (loaded) => {
+          await uploadFn(next.id, next.bucket, next.key, next.file, (loaded) => {
             const now = performance.now();
             const deltaBytes = Math.max(0, loaded - lastLoaded);
             const deltaSec = Math.max(0.25, (now - lastAt) / 1000);
@@ -1108,8 +1258,9 @@ export default function R2Admin() {
             }));
           }, controller.signal);
 
-          updateUploadTask(next.id, (t) => ({ ...t, status: "done", loaded: t.file.size, speedBps: 0 }));
+          updateUploadTask(next.id, (t) => ({ ...t, status: "done", loaded: t.file.size, speedBps: 0, multipart: undefined }));
           if (selectedBucket === next.bucket) fetchFiles(next.bucket, path);
+          if (next.resumeKey) deleteResumeRecord(next.resumeKey);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           const current = uploadTasksRef.current.find((t) => t.id === next.id);
@@ -1137,6 +1288,7 @@ export default function R2Admin() {
       bucket: selectedBucket,
       file,
       key: prefix + file.name,
+      resumeKey: getResumeKey(selectedBucket, prefix + file.name, file),
       loaded: 0,
       speedBps: 0,
       status: "queued",
@@ -1526,7 +1678,7 @@ export default function R2Admin() {
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input 
                 type="text" 
-                placeholder="全局搜索（当前桶）..." 
+                placeholder="桶内全局搜索..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9 pr-4 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 w-48 transition-all"
@@ -1539,25 +1691,12 @@ export default function R2Admin() {
             </div>
             <div className="h-6 w-px bg-gray-200 mx-1"></div>
             <button 
-              onClick={() => fetchFiles(selectedBucket!, path)} 
-              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+              onClick={() => selectedBucket && fetchFiles(selectedBucket, path)} 
+              disabled={!selectedBucket}
+              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title="刷新"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={`p-2 rounded-lg transition-colors ${viewMode === "list" ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:bg-gray-100"}`}
-              title="列表视图"
-            >
-              <ListIcon className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode("grid")}
-              className={`p-2 rounded-lg transition-colors ${viewMode === "grid" ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:bg-gray-100"}`}
-              title="网格视图"
-            >
-              <LayoutGrid className="w-4 h-4" />
             </button>
             <button
               onClick={handleBatchDownload}
@@ -1623,7 +1762,76 @@ export default function R2Admin() {
             setSelectedItem(null);
           }}
         >
-          {filteredFiles.length === 0 && !loading && !searchLoading ? (
+          {connectionStatus === "unbound" ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="w-full max-w-2xl bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-800">未绑定存储桶</div>
+                    <div className="mt-1 text-sm text-gray-500 leading-relaxed">
+                      这个站点使用 Cloudflare Pages 的 <span className="font-semibold text-gray-700">R2 绑定</span> 来管理文件；
+                      你需要先在 Pages 项目里绑定至少 1 个 R2 存储桶。
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => fetchBuckets()}
+                    className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium transition-colors whitespace-nowrap"
+                  >
+                    重新检测
+                  </button>
+                </div>
+
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">绑定步骤（中文界面）</div>
+                    <ol className="mt-3 space-y-2 text-sm text-gray-700 list-decimal pl-5">
+                      <li>进入 Cloudflare Pages 项目</li>
+                      <li>点击「设置」→「函数」</li>
+                      <li>在「绑定」中选择「R2 存储桶」→「添加」</li>
+                      <li>填写绑定名称（建议英文）并选择你的桶</li>
+                      <li>保存后重新部署（或点击上方“重新检测”）</li>
+                    </ol>
+                  </div>
+
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">示例绑定名</div>
+                    <div className="mt-3 text-sm text-gray-700 leading-relaxed space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-medium">博客桶</span>
+                        <code className="px-2 py-1 rounded bg-white border border-gray-200 text-xs">R2_BLOG</code>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-medium">云盘桶</span>
+                        <code className="px-2 py-1 rounded bg-white border border-gray-200 text-xs">R2_CLOUD</code>
+                      </div>
+                      <div className="text-[12px] text-gray-500">
+                        建议以 <code className="px-1.5 py-0.5 rounded bg-white border border-gray-200 text-[11px]">R2_</code> 开头，便于自动识别与切换。
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="text-xs font-semibold text-gray-600">可选配置</div>
+                  <ul className="mt-2 text-sm text-gray-700 space-y-1.5 list-disc pl-5">
+                    <li>
+                      显示中文桶名：设置环境变量{" "}
+                      <code className="px-1.5 py-0.5 rounded bg-gray-50 border border-gray-200 text-[11px]">R2_BUCKETS</code>{" "}
+                      ，例如{" "}
+                      <code className="px-1.5 py-0.5 rounded bg-gray-50 border border-gray-200 text-[11px]">
+                        R2_BLOG:博客,R2_CLOUD:云盘
+                      </code>
+                    </li>
+                    <li>
+                      访问密码：设置环境变量{" "}
+                      <code className="px-1.5 py-0.5 rounded bg-gray-50 border border-gray-200 text-[11px]">ADMIN_PASSWORD</code>{" "}
+                      （未设置则不会弹出登录页）
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          ) : filteredFiles.length === 0 && !loading && !searchLoading ? (
             <div className="h-full flex flex-col items-center justify-center text-gray-400">
               <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-4">
                 <Folder className="w-10 h-10 text-gray-300" />
@@ -1632,45 +1840,6 @@ export default function R2Admin() {
             </div>
           ) : (
             <>
-              {viewMode === "grid" ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 content-start">
-                  {filteredFiles.map((file) => (
-                    <div
-                      key={file.key}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedItem(file);
-                      }}
-                      onDoubleClick={(e) => {
-                        e.stopPropagation();
-                        if (file.type === "folder") handleEnterFolder(file.name);
-                      }}
-                      className={`group relative p-4 rounded-xl border transition-all cursor-pointer flex flex-col items-center gap-3 text-center ${
-                        selectedItem?.key === file.key
-                          ? "bg-blue-50 border-blue-500 shadow-sm ring-1 ring-blue-500 z-10"
-                          : "bg-white border-gray-200 hover:border-blue-300 hover:shadow-md"
-                      }`}
-                    >
-                      <div className="w-14 h-14 flex items-center justify-center transition-transform group-hover:scale-105">
-                        {getIcon(file.type, file.name)}
-                      </div>
-	                      <div className="w-full min-w-0">
-	                        <p className="text-sm font-medium text-gray-700 truncate w-full px-1" title={file.name}>
-	                          {file.name}
-	                        </p>
-	                        <div className="mt-1 flex items-center justify-center gap-2">
-	                          <span className="text-[10px] px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-600 font-semibold">
-	                            {getFileTag(file)}
-	                          </span>
-	                          <span className="text-[10px] text-gray-400 font-medium">
-	                            {file.type === "folder" ? "文件夹" : formatSize(file.size)}
-	                          </span>
-	                        </div>
-	                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
                 <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
                   <div className="flex items-center px-4 py-2.5 text-[11px] font-semibold text-gray-500 bg-gray-50 border-b border-gray-200">
                     <div className="w-10 flex items-center justify-center">
@@ -1818,7 +1987,6 @@ export default function R2Admin() {
                     })}
                   </div>
                 </div>
-              )}
             </>
           )}
         </div>
