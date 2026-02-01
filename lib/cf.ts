@@ -91,8 +91,9 @@ export const listBoundBuckets = (): BoundBucket[] => {
 
   // Fallback: discover by enumerating env keys.
   const keys = Array.from(new Set([...(Object.keys(env) ?? []), ...(Reflect.ownKeys(env) as string[])]));
+  const candidateKeys = keys.filter((k) => /^R2_/.test(k));
   const buckets: BoundBucket[] = [];
-  for (const k of keys) {
+  for (const k of candidateKeys) {
     try {
       const v = (env as Record<string, unknown>)[k];
       if (looksLikeR2Bucket(v)) buckets.push({ id: k, name: k });
