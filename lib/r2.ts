@@ -1,4 +1,5 @@
 import { S3Client } from "@aws-sdk/client-s3";
+import "@/lib/edge-polyfills";
 
 export const getR2Client = (accountId: string, accessKeyId: string, secretAccessKey: string) => {
   return new S3Client({
