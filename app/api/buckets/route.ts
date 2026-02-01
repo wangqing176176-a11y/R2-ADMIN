@@ -1,5 +1,5 @@
-import "@/lib/edge-polyfills";
 import { NextRequest, NextResponse } from "next/server";
+import { ensureDomParser } from "@/lib/edge-polyfills";
 import { ListBucketsCommand } from "@aws-sdk/client-s3";
 import { getR2Client } from "@/lib/r2";
 import { getAuthFromHeaders } from "@/utils/auth";
@@ -7,6 +7,7 @@ import { getAuthFromHeaders } from "@/utils/auth";
 export const runtime = "edge";
 
 export async function GET(req: NextRequest) {
+  ensureDomParser();
   try {
     const { accountId, accessKeyId, secretAccessKey } = getAuthFromHeaders(req);
     const r2 = getR2Client(accountId, accessKeyId, secretAccessKey);

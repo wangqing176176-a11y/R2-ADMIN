@@ -1,5 +1,5 @@
-import "@/lib/edge-polyfills";
 import { NextRequest, NextResponse } from "next/server";
+import { ensureDomParser } from "@/lib/edge-polyfills";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getR2Client } from "@/lib/r2";
@@ -13,6 +13,7 @@ const safeFilename = (name: string) => {
 };
 
 export async function GET(req: NextRequest) {
+  ensureDomParser();
   const { searchParams } = new URL(req.url);
   const bucket = searchParams.get("bucket");
   const key = searchParams.get("key");

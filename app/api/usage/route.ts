@@ -1,5 +1,5 @@
-import "@/lib/edge-polyfills";
 import { NextRequest, NextResponse } from "next/server";
+import { ensureDomParser } from "@/lib/edge-polyfills";
 import { ListObjectsV2Command, type ListObjectsV2CommandOutput } from "@aws-sdk/client-s3";
 import { getR2Client } from "@/lib/r2";
 import { getAuthFromHeaders } from "@/utils/auth";
@@ -13,6 +13,7 @@ const parsePositiveInt = (value: string | null, fallback: number) => {
 };
 
 export async function GET(req: NextRequest) {
+  ensureDomParser();
   const { searchParams } = new URL(req.url);
   const bucket = searchParams.get("bucket");
   const prefix = searchParams.get("prefix") ?? "";

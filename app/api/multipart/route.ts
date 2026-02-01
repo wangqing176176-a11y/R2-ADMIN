@@ -1,5 +1,5 @@
-import "@/lib/edge-polyfills";
 import { NextRequest, NextResponse } from "next/server";
+import { ensureDomParser } from "@/lib/edge-polyfills";
 import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
@@ -15,6 +15,7 @@ export const runtime = "edge";
 type Action = "create" | "signPart" | "complete" | "abort";
 
 export async function POST(req: NextRequest) {
+  ensureDomParser();
   try {
     const body = (await req.json()) as Record<string, unknown>;
     const action = body.action as Action | undefined;

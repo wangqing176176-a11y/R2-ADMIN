@@ -1,5 +1,5 @@
-import "@/lib/edge-polyfills";
 import { NextRequest, NextResponse } from "next/server";
+import { ensureDomParser } from "@/lib/edge-polyfills";
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
@@ -61,6 +61,7 @@ const deleteKeys = async (r2: S3Client, bucket: string, keys: string[]) => {
 };
 
 export async function POST(req: NextRequest) {
+  ensureDomParser();
   try {
     const { bucket, sourceKey, targetKey, operation } = (await req.json()) as {
       bucket?: string;

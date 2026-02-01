@@ -1,5 +1,5 @@
-import "@/lib/edge-polyfills";
 import { NextRequest, NextResponse } from "next/server";
+import { ensureDomParser } from "@/lib/edge-polyfills";
 import { getR2Client } from "@/lib/r2";
 import { getAuthFromHeaders } from "@/utils/auth";
 import { 
@@ -13,6 +13,7 @@ export const runtime = "edge";
 
 // 获取文件列表
 export async function GET(req: NextRequest) {
+  ensureDomParser();
   const { searchParams } = new URL(req.url);
   const bucket = searchParams.get("bucket");
   const prefix = searchParams.get("prefix") || "";
@@ -53,6 +54,7 @@ export async function GET(req: NextRequest) {
 
 // 删除文件
 export async function DELETE(req: NextRequest) {
+  ensureDomParser();
   const { searchParams } = new URL(req.url);
   const bucket = searchParams.get("bucket");
   const key = searchParams.get("key");
@@ -72,6 +74,7 @@ export async function DELETE(req: NextRequest) {
 
 // 获取上传预签名 URL (POST)
 export async function POST(req: NextRequest) {
+  ensureDomParser();
   const { bucket, key, contentType } = await req.json();
   if (!bucket || !key) return NextResponse.json({ error: "Missing params" }, { status: 400 });
   const { accountId, accessKeyId, secretAccessKey } = getAuthFromHeaders(req);
