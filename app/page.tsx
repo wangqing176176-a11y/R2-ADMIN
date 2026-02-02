@@ -424,7 +424,7 @@ export default function R2Admin() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 401) {
-        setToast("密码错误");
+        setToast("账号或密码错误 请重试！");
         return;
       }
       if (!res.ok) throw new Error(data.error || "Failed");
@@ -443,9 +443,9 @@ export default function R2Admin() {
       if (!selectedBucket && data.buckets?.length) setSelectedBucket(data.buckets[0].id);
       setConnectionStatus((data.buckets?.length ?? 0) > 0 ? "connected" : "unbound");
       setConnectionDetail((data.buckets?.length ?? 0) > 0 ? null : "未绑定存储桶：请在 Cloudflare Pages 设置中绑定 R2 存储桶");
-      setToast("已解锁");
+      setToast("登陆成功");
     } catch {
-      setToast("解锁失败");
+      setToast("登陆失败");
     } finally {
       setLoading(false);
     }
@@ -3124,7 +3124,6 @@ export default function R2Admin() {
       <Modal
         open={logoutOpen}
         title="确认退出登录？"
-        description="退出后将清除本地登录状态，需要重新输入管理账号和密码才能继续使用。"
         onClose={() => setLogoutOpen(false)}
         footer={
           <div className="flex justify-end gap-2">
@@ -3146,7 +3145,7 @@ export default function R2Admin() {
           </div>
         }
       >
-        <div className="text-sm text-gray-700 dark:text-gray-200">确定要退出当前账号吗？</div>
+        <div className="text-sm text-gray-700 dark:text-gray-200">退出后将清除本地登录状态，需要重新输入管理账号和密码才能继续使用。确定退出登录吗？</div>
       </Modal>
 
       <Modal
