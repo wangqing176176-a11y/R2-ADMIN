@@ -1545,11 +1545,16 @@ export default function R2Admin() {
 
   // --- 渲染：登录界面 ---
   if (authRequired) {
+    const showAnnouncementPanel = !isMobile || loginAnnouncementOpen;
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 flex items-center justify-center p-6 font-sans">
+      <div className="min-h-dvh bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-gray-950 dark:via-gray-950 dark:to-gray-900 flex items-center justify-center px-4 py-6 sm:p-6 font-sans text-gray-900 dark:text-gray-100 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
           {/* 左侧：公告与说明 */}
-          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col order-2 lg:order-1">
+          <section
+            className={`rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col order-2 lg:order-1 dark:border-gray-800 dark:bg-gray-900 ${
+              showAnnouncementPanel ? "" : "hidden"
+            }`}
+          >
             <div className="px-8 py-7 h-[168px] bg-gradient-to-br from-indigo-600 to-blue-600 text-white flex items-center">
               <div className="w-full">
                 <div className="text-sm font-medium text-white/85">{LOGIN_PAGE.title}</div>
@@ -1560,8 +1565,8 @@ export default function R2Admin() {
 
             <div className="px-8 py-7 flex flex-col gap-6 grow">
               <div>
-                <div className="text-xs font-semibold tracking-wide text-gray-500">平台优势</div>
-                <ul className="mt-3 space-y-2 text-sm text-gray-800">
+                <div className="text-xs font-semibold tracking-wide text-gray-500 dark:text-gray-400">平台优势</div>
+                <ul className="mt-3 space-y-2 text-sm text-gray-800 dark:text-gray-200">
                   {LOGIN_PAGE.advantages.map((t) => (
                     <li key={t} className="flex gap-3">
                       <span className="mt-2 h-1.5 w-1.5 rounded-full bg-blue-600 flex-none" />
@@ -1572,27 +1577,14 @@ export default function R2Admin() {
               </div>
 
               <div>
-                <button
-                  type="button"
-                  onClick={() => (isMobile ? setLoginAnnouncementOpen((v) => !v) : null)}
-                  className="w-full flex items-center justify-between gap-3 text-left"
-                  aria-expanded={!isMobile ? true : loginAnnouncementOpen}
-                >
-                  <div className="text-xs font-semibold tracking-wide text-gray-500">{LOGIN_PAGE.announcementTitle}</div>
-                  {isMobile ? (
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${loginAnnouncementOpen ? "rotate-180" : ""}`} />
-                  ) : null}
-                </button>
-                {!isMobile || loginAnnouncementOpen ? (
-                  <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                    {LOGIN_PAGE.announcementText}
-                  </div>
-                ) : null}
-
+                <div className="text-xs font-semibold tracking-wide text-gray-500 dark:text-gray-400">{LOGIN_PAGE.announcementTitle}</div>
+                <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed dark:border-gray-800 dark:bg-gray-950/30 dark:text-gray-200">
+                  {LOGIN_PAGE.announcementText}
+                </div>
               </div>
 
               <div className="mt-auto">
-                <div className="text-xs font-semibold tracking-wide text-gray-500">导航</div>
+                <div className="text-xs font-semibold tracking-wide text-gray-500 dark:text-gray-400">导航</div>
                 <nav className="mt-3 grid grid-cols-4 gap-2">
                   {LOGIN_LINKS.map((l) => {
                     const icon =
@@ -1612,10 +1604,12 @@ export default function R2Admin() {
                         href={l.href}
                         target={l.href.startsWith("mailto:") ? undefined : "_blank"}
                         rel={l.href.startsWith("mailto:") ? undefined : "noreferrer"}
-                        className="group rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors px-2 py-3 flex flex-col items-center justify-center gap-2"
+                        className="group rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors px-2 py-3 flex flex-col items-center justify-center gap-2 dark:border-gray-800 dark:bg-gray-950 dark:hover:bg-gray-900"
                       >
-                        <div className="text-gray-700 group-hover:text-blue-600 transition-colors">{icon}</div>
-                        <div className="text-[12px] text-gray-700 group-hover:text-blue-600 transition-colors">
+                        <div className="text-gray-700 group-hover:text-blue-600 transition-colors dark:text-gray-200 dark:group-hover:text-blue-300">
+                          {icon}
+                        </div>
+                        <div className="text-[12px] text-gray-700 group-hover:text-blue-600 transition-colors dark:text-gray-200 dark:group-hover:text-blue-300">
                           {l.label}
                         </div>
                       </a>
@@ -1623,7 +1617,7 @@ export default function R2Admin() {
                   })}
                 </nav>
 
-                <div className="mt-6 flex items-center justify-between text-xs text-gray-500">
+                <div className="mt-6 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                   <span>{LOGIN_PAGE.footer}</span>
                   <span className="inline-flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -1635,83 +1629,92 @@ export default function R2Admin() {
           </section>
 
           {/* 右侧：登录模块 */}
-	          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col order-1 lg:order-2">
-	            <div className="px-8 py-7 h-[168px] bg-blue-600 text-white flex items-center shrink-0">
+	          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col order-1 lg:order-2 dark:border-gray-800 dark:bg-gray-900">
+	            <div className="px-6 py-4 sm:px-8 sm:py-7 sm:h-[168px] bg-blue-600 text-white flex items-center shrink-0">
 	              <div className="flex items-center gap-4 w-full">
 	                <div className="h-12 w-12 flex items-center justify-center shrink-0">
 	                  <BrandMark className="w-12 h-12" />
 	                </div>
 	                <div>
 	                  <div className="text-2xl font-semibold leading-tight">{LOGIN_PAGE.title}</div>
-                  <div className="mt-1 text-[13px] text-white/80">{LOGIN_PAGE.subtitle}</div>
+	                  <div className="mt-1 text-[13px] text-white/80">{LOGIN_PAGE.subtitle}</div>
                 </div>
               </div>
             </div>
 
-            <div className="px-8 py-8 flex flex-col grow justify-center">
-              <div className="text-center">
-                <h2 className="text-3xl font-bold tracking-tight text-blue-600">管理员登录</h2>
-              </div>
+	            <div className="px-8 py-10 flex flex-col gap-8 grow">
+		              <div className="text-center">
+		                <h2 className="text-3xl font-bold tracking-tight text-blue-600 dark:text-blue-400">管理员登录</h2>
+		              </div>
 
-              <form onSubmit={handleLogin} className="mt-8 space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">管理账号</label>
-                  <input
-                    type="text"
-                    value={formUsername}
-                    onChange={(e) => setFormUsername(e.target.value)}
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                    placeholder="请输入账号"
-                  />
-                </div>
+		              <form onSubmit={handleLogin} className="space-y-7">
+	                <div>
+	                  <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">管理账号</label>
+	                  <input
+	                    type="text"
+	                    value={formUsername}
+	                    onChange={(e) => setFormUsername(e.target.value)}
+	                    className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100 dark:placeholder:text-gray-500"
+	                    placeholder="请输入账号"
+	                  />
+	                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">管理密码</label>
-                  <div className="relative">
-                    <input
-                      type={showSecret ? "text" : "password"}
-                      value={formPassword}
-                      onChange={(e) => setFormPassword(e.target.value)}
-                      className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all pr-10"
-                      placeholder="请输入密码"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowSecret(!showSecret)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      {showSecret ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
-                  </div>
-                </div>
+	                <div>
+	                  <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">管理密码</label>
+	                  <div className="relative">
+	                    <input
+	                      type={showSecret ? "text" : "password"}
+	                      value={formPassword}
+	                      onChange={(e) => setFormPassword(e.target.value)}
+	                      className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all pr-10 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100 dark:placeholder:text-gray-500"
+	                      placeholder="请输入密码"
+	                    />
+	                    <button
+	                      type="button"
+	                      onClick={() => setShowSecret(!showSecret)}
+	                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+	                    >
+	                      {showSecret ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+	                    </button>
+	                  </div>
+	                </div>
 
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="remember"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <label htmlFor="remember" className="ml-2 block text-sm text-gray-600">
-                    记住登陆状态
-                  </label>
-                </div>
+	                <div className="flex items-center">
+	                  <input
+	                    type="checkbox"
+	                    id="remember"
+	                    checked={rememberMe}
+	                    onChange={(e) => setRememberMe(e.target.checked)}
+	                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:border-gray-700"
+	                  />
+	                  <label htmlFor="remember" className="ml-2 block text-sm text-gray-600 dark:text-gray-300">
+	                    记住登陆状态
+	                  </label>
+	                </div>
 
-                <button
-                  type="submit"
-                  className="!mt-10 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors shadow-blue-500/20 shadow-lg flex items-center justify-center gap-2"
-                >
-                  <ShieldCheck className="w-5 h-5" />
-                  进入管理
-                </button>
-                <div className="text-xs text-gray-500 text-center pt-4">
-                  本站使用 Cloudflare Pages 绑定的 R2 存储桶进行管理；
-                  管理员设置了 ADMIN_PASSWORD，将要求输入管理账号和管理密码以验证。
-                </div>
-              </form>
-            </div>
-          </section>
+		                <button
+		                  type="submit"
+		                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors shadow-blue-500/20 shadow-lg flex items-center justify-center gap-2"
+		                >
+		                  <ShieldCheck className="w-5 h-5" />
+		                  进入管理
+		                </button>
+
+                    {isMobile ? (
+                      <button
+                        type="button"
+                        onClick={() => setLoginAnnouncementOpen((v) => !v)}
+                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+                      >
+                        {loginAnnouncementOpen ? "收起公告与说明" : "展开公告与说明"}
+                        <ChevronDown
+                          className={`w-4 h-4 text-gray-400 transition-transform ${loginAnnouncementOpen ? "rotate-180" : ""}`}
+                        />
+                      </button>
+                    ) : null}
+		              </form>
+		            </div>
+	          </section>
         </div>
 
         {ToastView}

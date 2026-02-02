@@ -21,6 +21,8 @@ const themeInitScript = `
     const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
     const isDark = mode === "dark" || (mode === "system" && prefersDark);
     document.documentElement.classList.toggle("dark", isDark);
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeMeta) themeMeta.setAttribute("content", isDark ? "#030712" : "#f9fafb");
   } catch {}
 })();
 `;
@@ -34,6 +36,7 @@ export default function RootLayout({
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <meta name="theme-color" content="#f9fafb" />
         <link rel="icon" href="/brand.png?v=1" type="image/png" />
         <link rel="apple-touch-icon" href="/brand.png?v=1" />
       </head>
