@@ -1713,7 +1713,7 @@ export default function R2Admin() {
   };
 
   const SidebarPanel = ({ onClose }: { onClose?: () => void }) => (
-    <div className="h-full bg-white border-r border-gray-200 flex flex-col shadow-sm dark:bg-gray-900 dark:border-gray-800">
+    <div className="h-full bg-white border-r border-gray-200 flex flex-col dark:bg-gray-900 dark:border-gray-800">
       <div className="h-16 px-5 border-b border-gray-100 flex items-center justify-between gap-3 dark:border-gray-800">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-blue-200 shadow-lg dark:shadow-blue-950/40 shrink-0">
