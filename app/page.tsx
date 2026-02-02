@@ -19,6 +19,21 @@ type ThemeMode = "system" | "light" | "dark";
 
 const THEME_STORE_KEY = "r2_admin_theme_v1";
 
+type ToastKind = "success" | "error" | "info";
+type ToastPayload = { kind: ToastKind; message: string; detail?: string };
+type ToastState = ToastPayload | string | null;
+
+const normalizeToast = (t: ToastState): ToastPayload | null => {
+  if (!t) return null;
+  if (typeof t === "string") {
+    const msg = t.trim();
+    const kind: ToastKind =
+      /失败|错误|异常/.test(msg) ? "error" : /成功|已/.test(msg) ? "success" : "info";
+    return { kind, message: msg };
+  }
+  return t;
+};
+
 const useMediaQuery = (query: string) => {
   const [matches, setMatches] = useState(false);
   useEffect(() => {
@@ -204,7 +219,8 @@ export default function R2Admin() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [linkConfigMap, setLinkConfigMap] = useState<LinkConfigMap>({});
 
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
+  const toastPayload = useMemo(() => normalizeToast(toast), [toast]);
 
   const isMobile = useMediaQuery("(max-width: 767px)");
   const prefersDark = useMediaQuery("(prefers-color-scheme: dark)");
@@ -235,6 +251,7 @@ export default function R2Admin() {
   const [linkCustom, setLinkCustom] = useState("");
 
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
 
   const uploadTasksRef = useRef<UploadTask[]>([]);
   const uploadProcessingRef = useRef(false);
@@ -275,10 +292,44 @@ export default function R2Admin() {
   }, []);
 
   useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 1800);
-    return () => clearTimeout(t);
-  }, [toast]);
+    const t = toastPayload;
+    if (!t) return;
+    const ms = t.kind === "error" ? 4500 : 3200;
+    const timer = setTimeout(() => setToast(null), ms);
+    return () => clearTimeout(timer);
+  }, [toastPayload]);
+
+  const ToastView = toastPayload ? (
+    <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 w-[min(92vw,420px)]">
+      <div
+        className={`flex items-start gap-3 px-4 py-3 rounded-2xl border shadow-lg ${
+          toastPayload.kind === "success"
+            ? "bg-green-50 border-green-200 text-green-900 dark:bg-green-950/40 dark:border-green-900 dark:text-green-100"
+            : toastPayload.kind === "error"
+              ? "bg-red-50 border-red-200 text-red-900 dark:bg-red-950/40 dark:border-red-900 dark:text-red-100"
+              : "bg-gray-50 border-gray-200 text-gray-900 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100"
+        }`}
+        role="status"
+        aria-live="polite"
+      >
+        <div className="mt-0.5 shrink-0">
+          {toastPayload.kind === "success" ? (
+            <ShieldCheck className="w-5 h-5" />
+          ) : toastPayload.kind === "error" ? (
+            <CircleX className="w-5 h-5" />
+          ) : (
+            <BadgeInfo className="w-5 h-5" />
+          )}
+        </div>
+        <div className="min-w-0">
+          <div className="text-sm font-semibold leading-snug">{toastPayload.message}</div>
+          {toastPayload.detail ? (
+            <div className="mt-0.5 text-[12px] opacity-80 leading-snug">{toastPayload.detail}</div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   useEffect(() => {
     if (!authRequired) return;
@@ -403,11 +454,14 @@ export default function R2Admin() {
     setMoveOpen(false);
     setLinkOpen(false);
     setDeleteOpen(false);
-    setAuthRequired(false);
-    setConnectionStatus("checking");
-    setConnectionDetail(null);
-    setToast("已锁定");
-    setTimeout(() => fetchBuckets(), 0);
+    setAuthRequired(true);
+    setConnectionStatus("error");
+    setConnectionDetail("已退出登录，请重新输入管理账号和密码");
+    setFormUsername("");
+    setFormPassword("");
+    setRememberMe(false);
+    setLoading(false);
+    setToast("退出登录成功");
   };
 
   // --- API 调用 ---
@@ -688,9 +742,9 @@ export default function R2Admin() {
       setMkdirOpen(false);
       setSearchTerm("");
       await fetchFiles(selectedBucket, path);
-      setToast("已创建文件夹");
+      setToast("新建文件夹成功");
     } catch {
-      setToast("创建失败");
+      setToast("新建文件夹失败，请重试");
     } finally {
       setLoading(false);
     }
@@ -744,9 +798,9 @@ export default function R2Admin() {
       await refreshCurrentView();
       setSelectedItem(null);
       setSelectedKeys(new Set());
-      setToast("已删除");
+      setToast("删除成功");
     } catch {
-      setToast("删除失败");
+      setToast("删除失败，请刷新后重试");
     } finally {
       setLoading(false);
     }
@@ -829,9 +883,9 @@ export default function R2Admin() {
       await refreshCurrentView();
       setSelectedItem(null);
       setSelectedKeys(new Set());
-      setToast("已重命名");
+      setToast("重命名成功");
     } catch {
-      setToast("重命名失败");
+      setToast("重命名失败，请刷新后重试");
     } finally {
       setLoading(false);
     }
@@ -1645,12 +1699,7 @@ export default function R2Admin() {
           </section>
         </div>
 
-        {/* 悬浮提示 */}
-        {toast ? (
-          <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50">
-            <div className="px-4 py-2 rounded-full bg-gray-900 text-white shadow-lg text-sm">{toast}</div>
-          </div>
-        ) : null}
+        {ToastView}
       </div>
     );
   }
@@ -1681,28 +1730,6 @@ export default function R2Admin() {
           </div>
         </div>
         <div className="flex items-center gap-1">
-          {/* 移动端抽屉里不显示主题切换（主页工具栏已提供） */}
-          {!onClose ? (
-            <button
-              type="button"
-              onClick={() =>
-                setThemeMode((prev) =>
-                  prev === "system" ? (resolvedDark ? "light" : "dark") : prev === "dark" ? "light" : "system",
-                )
-              }
-              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-              title={themeMode === "system" ? "主题：跟随系统" : themeMode === "dark" ? "主题：深色" : "主题：浅色"}
-              aria-label="切换主题"
-            >
-              {themeMode === "dark" ? (
-                <Moon className="w-4 h-4" />
-              ) : themeMode === "light" ? (
-                <Sun className="w-4 h-4" />
-              ) : (
-                <Monitor className="w-4 h-4" />
-              )}
-            </button>
-          ) : null}
           {onClose ? (
             <button
               type="button"
@@ -1720,14 +1747,14 @@ export default function R2Admin() {
         <div className="p-3 space-y-3 shrink-0">
           <div className="px-1">
             <div className="flex items-center justify-between gap-2">
-              <div className="text-xs font-bold text-gray-400 uppercase px-2 mt-2 tracking-wider dark:text-gray-400">存储桶</div>
+              <div className="text-xs font-semibold text-gray-500 uppercase px-2 tracking-wider leading-none dark:text-gray-400">存储桶</div>
               <button
                 type="button"
                 onClick={() => {
                   void fetchBuckets();
                   setToast("已刷新桶列表");
                 }}
-                className="px-2 py-1 rounded-md text-xs font-bold text-blue-600 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/30"
+                className="px-2 py-1 rounded-md text-xs font-medium text-blue-600 hover:bg-blue-50 leading-none dark:text-blue-300 dark:hover:bg-blue-950/30"
                 title="刷新桶列表"
                 aria-label="刷新桶列表"
               >
@@ -1908,7 +1935,7 @@ export default function R2Admin() {
         </button>
 
         <button
-          onClick={handleLogout}
+          onClick={() => setLogoutOpen(true)}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 rounded-lg text-xs font-medium transition-colors dark:bg-gray-900 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-red-950/40 dark:hover:text-red-200 dark:hover:border-red-900"
         >
           <LogOut className="w-3 h-3" />
@@ -2166,8 +2193,8 @@ export default function R2Admin() {
         {/* 顶部工具栏 */}
         <div className="border-b border-gray-200 bg-white shrink-0 dark:border-gray-800 dark:bg-gray-900">
           {/* 桌面端：保持原布局 */}
-          <div className="hidden md:flex h-16 border-b-0 items-center px-6">
-            <div className="ml-auto flex items-center gap-3">
+          <div className="hidden md:flex h-16 border-b-0 items-center px-6 gap-6">
+            <div className="flex-1 flex items-center justify-between">
               <button
                 onClick={() => selectedBucket && fetchFiles(selectedBucket, path)}
                 disabled={!selectedBucket}
@@ -2248,7 +2275,9 @@ export default function R2Admin() {
                 )}
                 <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">主题</span>
               </button>
-              <div className="h-6 w-px bg-gray-200 mx-1 dark:bg-gray-800"></div>
+            </div>
+
+            <div className="flex items-center gap-3">
               <div className="relative">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                 <input
@@ -3061,6 +3090,34 @@ export default function R2Admin() {
       </Modal>
 
       <Modal
+        open={logoutOpen}
+        title="确认退出登录？"
+        description="退出后将清除本地登录状态，需要重新输入管理账号和密码才能继续使用。"
+        onClose={() => setLogoutOpen(false)}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setLogoutOpen(false)}
+              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800"
+            >
+              取消
+            </button>
+            <button
+              onClick={() => {
+                setLogoutOpen(false);
+                handleLogout();
+              }}
+              className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-sm font-medium"
+            >
+              退出登录
+            </button>
+          </div>
+        }
+      >
+        <div className="text-sm text-gray-700 dark:text-gray-200">确定要退出当前账号吗？</div>
+      </Modal>
+
+      <Modal
         open={linkOpen}
         title="链接设置"
         description={selectedBucket ? `桶：${selectedBucket}` : undefined}
@@ -3284,11 +3341,7 @@ export default function R2Admin() {
         </>
       ) : null}
 
-      {toast ? (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50">
-          <div className="px-4 py-2 rounded-full bg-gray-900 text-white shadow-lg text-sm">{toast}</div>
-        </div>
-      ) : null}
+      {ToastView}
 
       {preview ? (
         <div
