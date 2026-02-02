@@ -3222,10 +3222,10 @@ export default function R2Admin() {
         }
       >
         <div className="text-sm text-gray-700 dark:text-gray-200">
-          此操作不可恢复。
+          确定删除文件？此操作不可恢复。
           {selectedKeys.size > 0
             ? Array.from(selectedKeys).some((k) => k.endsWith("/"))
-              ? "（包含文件夹时会递归删除前缀下的所有对象）"
+              ? "（选择文件夹时，文件夹内的所有文件都将会被删除）"
               : null
             : selectedItem?.type === "folder"
               ? "（文件夹会递归删除前缀下的所有对象）"
