@@ -108,7 +108,7 @@ const LOGIN_PAGE = {
   advantages: [
     "极速的响应速度和上传下载速度",
     "无服务器部署、不存储用户数据",
-    "支持大文件分片上传、预览、批量操作等功能",
+    "支持大文件上传、预览、重命名、移动和批量操作等功能",
   ],
   announcementTitle: "公告",
   announcementText: `欢迎使用
@@ -211,6 +211,11 @@ export default function R2Admin() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
 
+  const [loginAnnouncementOpen, setLoginAnnouncementOpen] = useState(false);
+
+  const bucketMenuRef = useRef<HTMLDivElement>(null);
+  const [bucketMenuOpen, setBucketMenuOpen] = useState(false);
+
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [resolvedDark, setResolvedDark] = useState(false);
 
@@ -274,6 +279,23 @@ export default function R2Admin() {
     const t = setTimeout(() => setToast(null), 1800);
     return () => clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    if (!authRequired) return;
+    setLoginAnnouncementOpen(!isMobile);
+  }, [authRequired, isMobile]);
+
+  useEffect(() => {
+    if (!bucketMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (bucketMenuRef.current && bucketMenuRef.current.contains(target)) return;
+      setBucketMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [bucketMenuOpen]);
 
   useEffect(() => {
     try {
@@ -1413,7 +1435,7 @@ export default function R2Admin() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 flex items-center justify-center p-6 font-sans">
         <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
           {/* 左侧：公告与说明 */}
-          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col">
+          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col order-2 lg:order-1">
             <div className="px-8 py-7 h-[168px] bg-gradient-to-br from-indigo-600 to-blue-600 text-white flex items-center">
               <div className="w-full">
                 <div className="text-sm font-medium text-white/85">{LOGIN_PAGE.title}</div>
@@ -1436,10 +1458,22 @@ export default function R2Admin() {
               </div>
 
               <div>
-                <div className="text-xs font-semibold tracking-wide text-gray-500">{LOGIN_PAGE.announcementTitle}</div>
-                <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                  {LOGIN_PAGE.announcementText}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => (isMobile ? setLoginAnnouncementOpen((v) => !v) : null)}
+                  className="w-full flex items-center justify-between gap-3 text-left"
+                  aria-expanded={!isMobile ? true : loginAnnouncementOpen}
+                >
+                  <div className="text-xs font-semibold tracking-wide text-gray-500">{LOGIN_PAGE.announcementTitle}</div>
+                  {isMobile ? (
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${loginAnnouncementOpen ? "rotate-180" : ""}`} />
+                  ) : null}
+                </button>
+                {!isMobile || loginAnnouncementOpen ? (
+                  <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                    {LOGIN_PAGE.announcementText}
+                  </div>
+                ) : null}
 
               </div>
 
@@ -1487,7 +1521,7 @@ export default function R2Admin() {
           </section>
 
           {/* 右侧：登录模块 */}
-          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col">
+          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col order-1 lg:order-2">
             <div className="px-8 py-7 h-[168px] bg-blue-600 text-white flex items-center shrink-0">
               <div className="flex items-center gap-4 w-full">
                 <div className="h-12 w-12 rounded-2xl bg-white/15 flex items-center justify-center">
@@ -1583,13 +1617,14 @@ export default function R2Admin() {
     setSearchTerm("");
     setSelectedItem(null);
     setSelectedKeys(new Set());
+    setBucketMenuOpen(false);
   };
 
   const SidebarPanel = ({ onClose }: { onClose?: () => void }) => (
     <div className="h-full bg-white border-r border-gray-200 flex flex-col shadow-sm dark:bg-gray-900 dark:border-gray-800">
       <div className="p-5 border-b border-gray-100 flex items-center justify-between gap-3 dark:border-gray-800">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-blue-200 shadow-lg shrink-0">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-blue-200 shadow-lg dark:shadow-blue-950/40 shrink-0">
             <HardDrive className="w-5 h-5" />
           </div>
           <div className="min-w-0">
@@ -1597,43 +1632,105 @@ export default function R2Admin() {
             <p className="text-[10px] text-gray-400 font-medium dark:text-gray-400">绑定桶模式</p>
           </div>
         </div>
-        {onClose ? (
+        <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() =>
+              setThemeMode((prev) =>
+                prev === "system" ? (resolvedDark ? "light" : "dark") : prev === "dark" ? "light" : "system",
+              )
+            }
             className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-            aria-label="关闭菜单"
+            title={themeMode === "system" ? "主题：跟随系统" : themeMode === "dark" ? "主题：深色" : "主题：浅色"}
+            aria-label="切换主题"
           >
-            <X className="w-5 h-5" />
+            {themeMode === "dark" ? (
+              <Moon className="w-4 h-4" />
+            ) : themeMode === "light" ? (
+              <Sun className="w-4 h-4" />
+            ) : (
+              <Monitor className="w-4 h-4" />
+            )}
           </button>
-        ) : null}
+          {onClose ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+              aria-label="关闭菜单"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          ) : null}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div className="p-3 space-y-3">
         <div className="px-1">
-          <div className="text-xs font-bold text-gray-400 uppercase px-2 mt-2 tracking-wider dark:text-gray-400">存储桶</div>
-          <div className="relative mt-2">
-            <select
-              value={selectedBucket ?? ""}
-              onChange={(e) => selectBucket(e.target.value)}
-              disabled={buckets.length === 0}
-              className="w-full appearance-none rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100"
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs font-bold text-gray-400 uppercase px-2 mt-2 tracking-wider dark:text-gray-400">存储桶</div>
+            <button
+              type="button"
+              onClick={() => {
+                void fetchBuckets();
+                setToast("已刷新桶列表");
+              }}
+              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+              title="刷新桶列表"
+              aria-label="刷新桶列表"
             >
-              <option value="" disabled>
-                选择存储桶
-              </option>
-              {buckets.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.Name}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div ref={bucketMenuRef} className="relative mt-2">
+            <button
+              type="button"
+              onClick={() => setBucketMenuOpen((v) => !v)}
+              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100 flex items-center justify-between gap-3"
+              aria-haspopup="listbox"
+              aria-expanded={bucketMenuOpen}
+            >
+              <span className="truncate">
+                {selectedBucket ? buckets.find((b) => b.id === selectedBucket)?.Name ?? selectedBucket : "选择存储桶"}
+              </span>
+              <ChevronDown className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform ${bucketMenuOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {bucketMenuOpen ? (
+              <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden dark:border-gray-800 dark:bg-gray-900">
+                <div className="max-h-[40vh] overflow-auto p-2">
+                  {buckets.length ? (
+                    buckets.map((bucket) => (
+                      <button
+                        key={bucket.id}
+                        type="button"
+                        onClick={() => selectBucket(bucket.id)}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors ${
+                          selectedBucket === bucket.id
+                            ? "bg-blue-50 text-blue-700 font-medium dark:bg-blue-950/40 dark:text-blue-200"
+                            : "text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
+                        }`}
+                      >
+                        <div
+                          className={`w-2 h-2 rounded-full ${
+                            selectedBucket === bucket.id ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-700"
+                          }`}
+                        ></div>
+                        <span className="truncate">{bucket.Name}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">暂无桶</div>
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
 
-      <div className="p-4 border-t border-gray-100 bg-gray-50/50 space-y-3 dark:border-gray-800 dark:bg-gray-950/30">
+      <div className="flex-1 overflow-y-auto p-4 border-t border-gray-100 bg-gray-50/50 space-y-3 dark:border-gray-800 dark:bg-gray-950/30">
         <div
           className={`text-xs px-3 py-2 rounded-md border ${
             connectionStatus === "connected"
@@ -1960,46 +2057,34 @@ export default function R2Admin() {
       <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-900">
         {/* 顶部工具栏 */}
         <div className="border-b border-gray-200 bg-white shrink-0 dark:border-gray-800 dark:bg-gray-900">
-          <div className="flex items-center justify-between gap-3 px-4 md:px-6 py-3">
-            <div className="flex items-center gap-2 text-sm text-gray-600 min-w-0 mr-2 dark:text-gray-300">
+          {/* 桌面端：保持原布局 */}
+          <div className="hidden md:flex h-16 border-b-0 items-center justify-between px-6">
+            <div className="flex items-center gap-1 text-sm text-gray-600 overflow-hidden mr-4 dark:text-gray-300">
               <button
-                type="button"
-                onClick={() => setMobileNavOpen(true)}
-                className="md:hidden p-3 -ml-1 rounded-lg text-gray-600 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
-                aria-label="打开菜单"
+                onClick={() => {
+                  setPath([]);
+                  setSearchTerm("");
+                }}
+                className="hover:bg-gray-100 p-1.5 rounded-md transition-colors text-gray-500 flex items-center gap-1 dark:text-gray-300 dark:hover:bg-gray-800"
               >
-                <Menu className="w-5 h-5" />
+                <Home className="w-4 h-4" />
+                <span className="hidden sm:inline text-xs font-medium text-gray-600 dark:text-gray-300">根目录</span>
               </button>
-
-              <div className="flex items-center gap-1 overflow-hidden">
-                <button
-                  onClick={() => {
-                    setPath([]);
-                    setSearchTerm("");
-                  }}
-                  className="hover:bg-gray-100 p-2 rounded-md transition-colors text-gray-500 flex items-center gap-1 dark:text-gray-300 dark:hover:bg-gray-800"
-                >
-                  <Home className="w-4 h-4" />
-                  <span className="hidden sm:inline text-xs font-medium text-gray-600 dark:text-gray-300">根目录</span>
-                </button>
-                {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
-                {path.map((folder, idx) => (
-                  <React.Fragment key={idx}>
-                    <button
-                      onClick={() => handleBreadcrumbClick(idx)}
-                      className="hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors font-medium truncate max-w-[120px] dark:hover:text-blue-200 dark:hover:bg-blue-950/30"
-                    >
-                      {folder}
-                    </button>
-                    {idx < path.length - 1 && (
-                      <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />
-                    )}
-                  </React.Fragment>
-                ))}
-              </div>
+              {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
+              {path.map((folder, idx) => (
+                <React.Fragment key={idx}>
+                  <button
+                    onClick={() => handleBreadcrumbClick(idx)}
+                    className="hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors font-medium truncate max-w-[120px] dark:hover:text-blue-200 dark:hover:bg-blue-950/30"
+                  >
+                    {folder}
+                  </button>
+                  {idx < path.length - 1 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
+                </React.Fragment>
+              ))}
             </div>
 
-            <div className="flex items-center gap-2 md:gap-3 shrink-0">
+            <div className="flex items-center gap-3">
               <div className="relative hidden md:block">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                 <input
@@ -2007,7 +2092,7 @@ export default function R2Admin() {
                   placeholder="桶内全局搜索..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 pr-9 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 w-48 transition-all dark:bg-gray-950 dark:border-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
+                  className="pl-9 pr-4 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 w-48 transition-all dark:bg-gray-950 dark:border-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
                 />
                 {searchLoading ? (
                   <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -2015,32 +2100,11 @@ export default function R2Admin() {
                   </div>
                 ) : null}
               </div>
-              <div className="h-6 w-px bg-gray-200 mx-1 hidden md:block dark:bg-gray-800"></div>
-              <button
-                type="button"
-                onClick={() =>
-                  setThemeMode((prev) =>
-                    prev === "system" ? (resolvedDark ? "light" : "dark") : prev === "dark" ? "light" : "system",
-                  )
-                }
-                className="p-3 md:p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors dark:text-gray-300 dark:hover:bg-gray-800"
-                title={
-                  themeMode === "system" ? "主题：跟随系统" : themeMode === "dark" ? "主题：深色" : "主题：浅色"
-                }
-                aria-label="切换主题"
-              >
-                {themeMode === "dark" ? (
-                  <Moon className="w-4 h-4" />
-                ) : themeMode === "light" ? (
-                  <Sun className="w-4 h-4" />
-                ) : (
-                  <Monitor className="w-4 h-4" />
-                )}
-              </button>
+              <div className="h-6 w-px bg-gray-200 mx-1 dark:bg-gray-800"></div>
               <button
                 onClick={() => selectedBucket && fetchFiles(selectedBucket, path)}
                 disabled={!selectedBucket}
-                className="p-3 md:p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
                 title="刷新"
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
@@ -2048,7 +2112,7 @@ export default function R2Admin() {
               <button
                 onClick={handleBatchDownload}
                 disabled={selectedKeys.size === 0}
-                className="p-3 md:p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
                 title="批量下载（所选文件）"
               >
                 <Download className="w-4 h-4" />
@@ -2056,7 +2120,7 @@ export default function R2Admin() {
               <button
                 onClick={openBatchMove}
                 disabled={selectedKeys.size === 0}
-                className="p-3 md:p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
                 title="批量移动（所选文件）"
               >
                 <ArrowRightLeft className="w-4 h-4" />
@@ -2064,7 +2128,7 @@ export default function R2Admin() {
               <button
                 onClick={openMkdir}
                 disabled={!selectedBucket || !!searchTerm.trim()}
-                className="p-3 md:p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
                 title={searchTerm.trim() ? "搜索中无法新建文件夹" : "新建文件夹"}
               >
                 <FolderPlus className="w-4 h-4" />
@@ -2076,7 +2140,7 @@ export default function R2Admin() {
                   else fileInputRef.current?.click();
                 }}
                 disabled={!selectedBucket}
-                className="flex items-center gap-2 px-4 py-2.5 md:py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {uploadSummary.active > 0 ? (
                   <>
@@ -2090,28 +2154,137 @@ export default function R2Admin() {
                   </>
                 )}
               </button>
-              <input type="file" multiple ref={fileInputRef} className="hidden" onChange={handleUpload} />
             </div>
           </div>
 
-          <div className="px-4 pb-3 md:hidden">
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-              <input
-                type="text"
-                placeholder="桶内全局搜索..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-9 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all dark:bg-gray-950 dark:border-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
-              />
-              {searchLoading ? (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <RefreshCw className="w-4 h-4 text-gray-400 animate-spin dark:text-gray-500" />
+          {/* 移动端：分行布局，避免按钮挤压 */}
+          <div className="md:hidden px-4 py-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(true)}
+                className="p-3 -ml-1 rounded-lg text-gray-600 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                aria-label="打开菜单"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <div className="flex-1 overflow-x-auto">
+                <div className="flex items-center gap-1 min-w-max text-sm text-gray-600 dark:text-gray-300">
+                  <button
+                    onClick={() => {
+                      setPath([]);
+                      setSearchTerm("");
+                    }}
+                    className="hover:bg-gray-100 p-2 rounded-md transition-colors text-gray-500 flex items-center gap-1 dark:text-gray-300 dark:hover:bg-gray-800"
+                  >
+                    <Home className="w-4 h-4" />
+                    <span className="text-xs font-medium">根目录</span>
+                  </button>
+                  {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
+                  {path.map((folder, idx) => (
+                    <React.Fragment key={idx}>
+                      <button
+                        onClick={() => handleBreadcrumbClick(idx)}
+                        className="hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors font-medium whitespace-nowrap dark:hover:text-blue-200 dark:hover:bg-blue-950/30"
+                      >
+                        {folder}
+                      </button>
+                      {idx < path.length - 1 && (
+                        <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />
+                      )}
+                    </React.Fragment>
+                  ))}
                 </div>
-              ) : null}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+                <input
+                  type="text"
+                  placeholder="桶内搜索..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-9 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all dark:bg-gray-950 dark:border-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
+                />
+                {searchLoading ? (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <RefreshCw className="w-4 h-4 text-gray-400 animate-spin dark:text-gray-500" />
+                  </div>
+                ) : null}
+              </div>
+              <button
+                onClick={() => {
+                  if (!selectedBucket) return;
+                  if (uploadTasks.length > 0) setUploadPanelOpen(true);
+                  else fileInputRef.current?.click();
+                }}
+                disabled={!selectedBucket}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                <Upload className="w-4 h-4" />
+                <span>上传</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto -mx-4 px-4 pb-1">
+              <button
+                onClick={() => selectedBucket && fetchFiles(selectedBucket, path)}
+                disabled={!selectedBucket}
+                className="p-3 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                title="刷新"
+              >
+                <RefreshCw className={`w-5 h-5 ${loading ? "animate-spin" : ""}`} />
+              </button>
+              <button
+                onClick={handleBatchDownload}
+                disabled={selectedKeys.size === 0}
+                className="p-3 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                title="批量下载（所选文件）"
+              >
+                <Download className="w-5 h-5" />
+              </button>
+              <button
+                onClick={openBatchMove}
+                disabled={selectedKeys.size === 0}
+                className="p-3 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                title="批量移动（所选文件）"
+              >
+                <ArrowRightLeft className="w-5 h-5" />
+              </button>
+              <button
+                onClick={openMkdir}
+                disabled={!selectedBucket || !!searchTerm.trim()}
+                className="p-3 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                title={searchTerm.trim() ? "搜索中无法新建文件夹" : "新建文件夹"}
+              >
+                <FolderPlus className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setThemeMode((prev) =>
+                    prev === "system" ? (resolvedDark ? "light" : "dark") : prev === "dark" ? "light" : "system",
+                  )
+                }
+                className="p-3 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors dark:text-gray-300 dark:hover:bg-gray-800"
+                title={themeMode === "system" ? "主题：跟随系统" : themeMode === "dark" ? "主题：深色" : "主题：浅色"}
+                aria-label="切换主题"
+              >
+                {themeMode === "dark" ? (
+                  <Moon className="w-5 h-5" />
+                ) : themeMode === "light" ? (
+                  <Sun className="w-5 h-5" />
+                ) : (
+                  <Monitor className="w-5 h-5" />
+                )}
+              </button>
             </div>
           </div>
         </div>
+
+        <input type="file" multiple ref={fileInputRef} className="hidden" onChange={handleUpload} />
 
         {loading || searchLoading ? (
           <div className="h-1 w-full bg-blue-100 dark:bg-blue-950/40">
@@ -2359,12 +2532,12 @@ export default function R2Admin() {
       </div>
 
       {/* 桌面端：右侧信息面板 */}
-      <div className="hidden lg:flex w-80 shrink-0">
+      <div className="hidden md:flex w-80 shrink-0">
         <DetailsPanel />
       </div>
 
       {/* 移动端：详情底部弹窗 */}
-      <div className={`fixed inset-0 z-50 lg:hidden ${mobileDetailOpen ? "" : "pointer-events-none"}`}>
+      <div className={`fixed inset-0 z-50 md:hidden ${mobileDetailOpen ? "" : "pointer-events-none"}`}>
         <button
           type="button"
           aria-label="关闭详情"
