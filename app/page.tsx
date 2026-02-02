@@ -1713,7 +1713,11 @@ export default function R2Admin() {
   };
 
   const SidebarPanel = ({ onClose }: { onClose?: () => void }) => (
-    <div className="h-full bg-white border-r border-gray-200 flex flex-col dark:bg-gray-900 dark:border-gray-800">
+    <div
+      className={`h-full w-full bg-white border-r border-gray-200 flex flex-col dark:bg-gray-900 dark:border-gray-800 ${
+        onClose ? "shadow-sm" : ""
+      }`}
+    >
       <div className="h-16 px-5 border-b border-gray-100 flex items-center justify-between gap-3 dark:border-gray-800">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-blue-200 shadow-lg dark:shadow-blue-950/40 shrink-0">
@@ -2179,16 +2183,16 @@ export default function R2Admin() {
       </div>
 
       {/* 桌面端：左侧栏 */}
-      <div className="hidden md:flex w-[17rem] shrink-0">
+      <div className="hidden md:block w-[17rem] shrink-0">
         <SidebarPanel />
       </div>
 
       {/* 中间：文件浏览器 */}
-      <main className="flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-900/50 ml-[-1px]">
+      <main className="flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-900">
         {/* 顶部工具栏 */}
-        <div className="border-b border-gray-200 bg-white shrink-0 dark:border-gray-800 dark:bg-gray-900">
+          <div className="border-b border-gray-200 bg-white shrink-0 dark:border-gray-800 dark:bg-gray-900">
           {/* 桌面端：保持原布局 */}
-          <div className="hidden md:flex h-16 border-b-0 items-center px-4 pl-0 gap-6">
+          <div className="hidden md:flex h-16 border-b-0 items-center px-6 gap-6">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => selectedBucket && fetchFiles(selectedBucket, path)}
@@ -2315,7 +2319,7 @@ export default function R2Admin() {
           </div>
 
           {/* 桌面端：面包屑单独一行显示，避免被按钮挤压 */}
-          <div className="hidden md:flex items-start gap-1 px-4 pl-0 py-2 border-t border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <div className="hidden md:flex items-start gap-1 px-6 py-2 border-t border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900">
             <div className="flex flex-wrap items-center gap-1 text-sm text-gray-600 dark:text-gray-300">
               <button
                 onClick={() => {
@@ -2521,7 +2525,7 @@ export default function R2Admin() {
 
         {/* 文件列表 */}
         <div
-          className={`flex-1 overflow-y-auto p-3 md:py-4 md:pr-4 md:pl-0 bg-gray-50/30 dark:bg-gray-950/25 ${loading ? "pointer-events-none" : ""}`}
+          className={`flex-1 overflow-y-auto p-3 md:py-4 md:px-6 bg-gray-50/30 dark:bg-gray-950/25 ${loading ? "pointer-events-none" : ""}`}
           onClick={() => {
             setSelectedItem(null);
           }}
