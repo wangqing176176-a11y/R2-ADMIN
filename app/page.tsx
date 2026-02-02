@@ -1713,7 +1713,7 @@ export default function R2Admin() {
   };
 
   const SidebarPanel = ({ onClose }: { onClose?: () => void }) => (
-    <div className="h-full bg-white flex flex-col dark:bg-gray-900">
+    <div className="h-full bg-white border-r border-gray-200 flex flex-col dark:bg-gray-900 dark:border-gray-800">
       <div className="h-16 px-5 border-b border-gray-100 flex items-center justify-between gap-3 dark:border-gray-800">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-blue-200 shadow-lg dark:shadow-blue-950/40 shrink-0">
@@ -2184,7 +2184,7 @@ export default function R2Admin() {
       </div>
 
       {/* 中间：文件浏览器 */}
-      <main className="flex-1 flex flex-col min-w-0 bg-white border-l border-gray-200 dark:bg-gray-900/50 dark:border-gray-800">
+      <main className="flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-900/50">
         {/* 顶部工具栏 */}
         <div className="border-b border-gray-200 bg-white shrink-0 dark:border-gray-800 dark:bg-gray-900">
           {/* 桌面端：保持原布局 */}
