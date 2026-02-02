@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
     const { bucket } = getBucketById(bucketId);
 
     // Head for size/etag (helps browser show total size in download manager, enables Range parsing).
-    let head: any = null;
+    let head: Awaited<ReturnType<typeof bucket.head>> = null;
     const rangeHeader = req.headers.get("range");
     if (rangeHeader || download) head = await bucket.head(key);
 
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
 
     if (range) {
       const length = range.end - range.start + 1;
-      const obj: any = await bucket.get(key, { range: { offset: range.start, length } });
+      const obj = await bucket.get(key, { range: { offset: range.start, length } });
       if (!obj) return new Response("Not found", { status: 404 });
 
       const contentType = obj.httpMetadata?.contentType;
@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
       return new Response(obj.body, { status: 206, headers });
     }
 
-    const obj: any = await bucket.get(key);
+    const obj = await bucket.get(key);
     if (!obj) return new Response("Not found", { status: 404 });
 
     const contentType = obj.httpMetadata?.contentType;
@@ -105,8 +105,8 @@ export async function GET(req: NextRequest) {
     if (etag) headers.set("ETag", etag);
 
     return new Response(obj.body, { status: 200, headers });
-  } catch (error: any) {
-    const status = typeof error?.status === "number" ? error.status : 500;
+  } catch (error: unknown) {
+    const status = typeof (error as { status?: unknown })?.status === "number" ? (error as { status: number }).status : 500;
     const message = error instanceof Error ? error.message : String(error);
     return json(status, { error: message });
   }

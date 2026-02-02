@@ -3,11 +3,65 @@ export type BoundBucket = {
   name: string; // display name, e.g. qing-cloud
 };
 
+export type R2ObjectSummaryLike = {
+  key: string;
+  size?: number;
+  uploaded?: string;
+};
+
+export type R2ListResultLike = {
+  objects?: R2ObjectSummaryLike[];
+  delimitedPrefixes?: string[];
+  truncated?: boolean;
+  cursor?: string;
+};
+
+export type R2HeadResultLike = {
+  size?: number;
+  etag?: string;
+};
+
+export type R2HttpMetadataLike = {
+  contentType?: string;
+};
+
+export type R2GetResultLike = {
+  body: BodyInit | null;
+  size?: number;
+  etag?: string;
+  httpEtag?: string;
+  httpMetadata?: R2HttpMetadataLike;
+  customMetadata?: unknown;
+};
+
+export type R2MultipartPartResultLike = {
+  etag?: string;
+};
+
+export type R2MultipartUploadLike = {
+  uploadPart: (partNumber: number, body: unknown) => Promise<R2MultipartPartResultLike>;
+  complete: (parts: Array<{ etag: string; partNumber: number }>) => Promise<unknown>;
+  abort: () => Promise<unknown>;
+};
+
+export type R2BucketLike = {
+  list: (options: { prefix?: string; delimiter?: string; cursor?: string; limit?: number }) => Promise<R2ListResultLike>;
+  get: (key: string, options?: { range?: { offset: number; length: number } }) => Promise<R2GetResultLike | null>;
+  head: (key: string) => Promise<R2HeadResultLike | null>;
+  put: (key: string, value: unknown, options?: Record<string, unknown>) => Promise<{ etag?: string } | undefined>;
+  delete: (keyOrKeys: string | string[]) => Promise<unknown>;
+  createMultipartUpload?: (key: string, options?: Record<string, unknown>) => Promise<{ uploadId: string }>;
+  resumeMultipartUpload?: (key: string, uploadId: string) => R2MultipartUploadLike;
+};
+
 type EnvLike = Record<string, unknown>;
 
 const getRequestContext = (): { env?: EnvLike } | undefined => {
   const sym = Symbol.for("__cloudflare-request-context__");
-  return (globalThis as any)?.[sym] as { env?: EnvLike } | undefined;
+  const g = globalThis as unknown as Record<symbol, unknown>;
+  const ctx = g[sym];
+  if (!ctx || typeof ctx !== "object") return undefined;
+  return ctx as { env?: EnvLike };
 };
 
 const getEnv = (): EnvLike => {
@@ -15,7 +69,8 @@ const getEnv = (): EnvLike => {
   const ctx = getRequestContext();
   if (ctx?.env) return ctx.env;
   // Local dev fallback.
-  return (process as any)?.env ?? {};
+  const p = (globalThis as unknown as { process?: { env?: Record<string, unknown> } }).process;
+  return p?.env ?? {};
 };
 
 type ParsedBucketMap = {
@@ -90,7 +145,6 @@ const b64urlEncode = (bytes: Uint8Array) => {
   else {
     let s = "";
     for (const b of bytes) s += String.fromCharCode(b);
-    // eslint-disable-next-line no-undef
     base64 = btoa(s);
   }
   return base64.replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
@@ -181,7 +235,7 @@ export const getBucketById = (bucketId: string) => {
   const buckets = listBoundBuckets();
   const found = buckets.find((b) => b.id === bucketId || b.name === bucketId);
   if (!found) throw new Error("Unknown bucket binding");
-  const bucket = (env as Record<string, any>)[found.id];
+  const bucket = (env as Record<string, unknown>)[found.id] as unknown;
   if (!bucket) throw new Error("Bucket binding not configured");
-  return { bucket, meta: found };
+  return { bucket: bucket as R2BucketLike, meta: found };
 };

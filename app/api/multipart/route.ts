@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
 
     if (action === "create") {
       const contentType = body.contentType as string | undefined;
+      if (!bucket.createMultipartUpload) return NextResponse.json({ error: "Multipart not supported" }, { status: 400 });
       const upload = await bucket.createMultipartUpload(key, {
         httpMetadata: contentType ? { contentType } : undefined,
       });
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
       const parts = body.parts as Array<{ etag: string; partNumber: number }> | undefined;
       if (!uploadId || !parts?.length) return NextResponse.json({ error: "Missing params" }, { status: 400 });
 
+      if (!bucket.resumeMultipartUpload) return NextResponse.json({ error: "Multipart not supported" }, { status: 400 });
       const upload = bucket.resumeMultipartUpload(key, uploadId);
       await upload.complete(parts);
       return NextResponse.json({ ok: true });
@@ -56,14 +58,15 @@ export async function POST(req: NextRequest) {
       const uploadId = body.uploadId as string | undefined;
       if (!uploadId) return NextResponse.json({ error: "Missing params" }, { status: 400 });
 
+      if (!bucket.resumeMultipartUpload) return NextResponse.json({ error: "Multipart not supported" }, { status: 400 });
       const upload = bucket.resumeMultipartUpload(key, uploadId);
       await upload.abort();
       return NextResponse.json({ ok: true });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
-  } catch (error: any) {
-    const status = typeof error?.status === "number" ? error.status : 500;
+  } catch (error: unknown) {
+    const status = typeof (error as { status?: unknown })?.status === "number" ? (error as { status: number }).status : 500;
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status });
   }
@@ -90,14 +93,20 @@ export async function PUT(req: NextRequest) {
     await assertAdminOrToken(req, searchParams, payload);
 
     const { bucket } = getBucketById(bucketId);
+    if (!bucket.resumeMultipartUpload) {
+      return new Response(JSON.stringify({ error: "Multipart not supported" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     const upload = bucket.resumeMultipartUpload(key, uploadId);
-    const res: any = await upload.uploadPart(partNumber, req.body);
+    const res = await upload.uploadPart(partNumber, req.body);
 
     const headers = new Headers();
     if (res?.etag) headers.set("ETag", res.etag);
     return new Response(null, { status: 200, headers });
-  } catch (error: any) {
-    const status = typeof error?.status === "number" ? error.status : 500;
+  } catch (error: unknown) {
+    const status = typeof (error as { status?: unknown })?.status === "number" ? (error as { status: number }).status : 500;
     const message = error instanceof Error ? error.message : String(error);
     return new Response(JSON.stringify({ error: message }), {
       status,

@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     let cursor: string | undefined = undefined;
     for (;;) {
       pagesScanned += 1;
-      const res: any = await bucket.list({ prefix, cursor });
+      const res = await bucket.list({ prefix, cursor });
       for (const o of res.objects ?? []) {
         objects += 1;
         bytes += o.size ?? 0;
@@ -45,8 +45,8 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ bucket: bucketId, prefix, objects, bytes, pagesScanned, truncated });
-  } catch (error: any) {
-    const status = typeof error?.status === "number" ? error.status : 500;
+  } catch (error: unknown) {
+    const status = typeof (error as { status?: unknown })?.status === "number" ? (error as { status: number }).status : 500;
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status });
   }

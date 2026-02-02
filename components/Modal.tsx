@@ -22,15 +22,14 @@ export default function Modal({ open, title, description, children, onClose, foo
         onClick={onClose}
         aria-label="Close dialog"
       />
-      <div className="relative w-full max-w-lg rounded-2xl border border-gray-200 bg-white shadow-2xl">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <div className="text-base font-semibold text-gray-900">{title}</div>
-          {description ? <div className="mt-1 text-sm text-gray-500">{description}</div> : null}
+      <div className="relative w-full max-w-lg rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+          <div className="text-base font-semibold text-gray-900 dark:text-gray-100">{title}</div>
+          {description ? <div className="mt-1 text-sm text-gray-500 dark:text-gray-300">{description}</div> : null}
         </div>
-        <div className="px-5 py-4">{children}</div>
-        {footer ? <div className="px-5 py-4 border-t border-gray-100">{footer}</div> : null}
+        <div className="px-5 py-4 text-gray-900 dark:text-gray-100">{children}</div>
+        {footer ? <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-800">{footer}</div> : null}
       </div>
     </div>
   );
 }
-

@@ -5,6 +5,7 @@ import Modal from "@/components/Modal";
 import { 
   HardDrive, Folder, Trash2, Upload, RefreshCw, 
   Wifi, ChevronRight, Home, Search,
+  Menu, Sun, Moon, Monitor, ChevronDown,
   FileText, Image as ImageIcon, Music, Video, Edit2,
   FileArchive, FileCode, FileSpreadsheet, FileType, FileJson,
   LogOut, ShieldCheck, Eye, EyeOff,
@@ -13,6 +14,22 @@ import {
   Globe, BadgeInfo, Mail, BookOpen,
   FolderPlus,
 } from "lucide-react";
+
+type ThemeMode = "system" | "light" | "dark";
+
+const THEME_STORE_KEY = "r2_admin_theme_v1";
+
+const useMediaQuery = (query: string) => {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatches(mql.matches);
+    onChange();
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, [query]);
+  return matches;
+};
 
 // --- 类型定义 ---
 type Bucket = { id: string; Name: string; CreationDate: string };
@@ -189,6 +206,14 @@ export default function R2Admin() {
 
   const [toast, setToast] = useState<string | null>(null);
 
+  const isMobile = useMediaQuery("(max-width: 767px)");
+  const prefersDark = useMediaQuery("(prefers-color-scheme: dark)");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+
+  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
+  const [resolvedDark, setResolvedDark] = useState(false);
+
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
 
@@ -249,6 +274,39 @@ export default function R2Admin() {
     const t = setTimeout(() => setToast(null), 1800);
     return () => clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(THEME_STORE_KEY);
+      if (stored === "light" || stored === "dark" || stored === "system") setThemeMode(stored);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    const isDark = themeMode === "dark" || (themeMode === "system" && prefersDark);
+    setResolvedDark(isDark);
+    document.documentElement.classList.toggle("dark", isDark);
+    try {
+      localStorage.setItem(THEME_STORE_KEY, themeMode);
+    } catch {
+      // ignore
+    }
+  }, [prefersDark, themeMode]);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileNavOpen(false);
+      setMobileDetailOpen(false);
+    }
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    if (selectedItem) setMobileDetailOpen(true);
+    else setMobileDetailOpen(false);
+  }, [isMobile, selectedItem]);
 
   useEffect(() => {
     fetchBuckets();
@@ -1519,46 +1577,75 @@ export default function R2Admin() {
   }
 
   // --- 渲染：主界面 ---
-  return (
-    <div className="flex h-screen bg-gray-50 text-gray-900 font-sans overflow-hidden">
-      
-      {/* 左侧：存储桶列表 */}
-      <div className="w-64 bg-white border-r border-gray-200 flex flex-col shadow-sm z-10">
-        <div className="p-5 border-b border-gray-100 flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-blue-200 shadow-lg">
+  const selectBucket = (bucketId: string) => {
+    setSelectedBucket(bucketId);
+    setPath([]);
+    setSearchTerm("");
+    setSelectedItem(null);
+    setSelectedKeys(new Set());
+  };
+
+  const SidebarPanel = ({ onClose }: { onClose?: () => void }) => (
+    <div className="h-full bg-white border-r border-gray-200 flex flex-col shadow-sm dark:bg-gray-900 dark:border-gray-800">
+      <div className="p-5 border-b border-gray-100 flex items-center justify-between gap-3 dark:border-gray-800">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-blue-200 shadow-lg shrink-0">
             <HardDrive className="w-5 h-5" />
           </div>
-          <div>
-            <h1 className="font-bold text-base tracking-tight text-gray-800">Qing&apos;s R2 Admin</h1>
-            <p className="text-[10px] text-gray-400 font-medium">绑定桶模式</p>
+          <div className="min-w-0">
+            <h1 className="font-bold text-base tracking-tight text-gray-800 truncate dark:text-gray-100">Qing&apos;s R2 Admin</h1>
+            <p className="text-[10px] text-gray-400 font-medium dark:text-gray-400">绑定桶模式</p>
           </div>
         </div>
-        
-        <div className="flex-1 overflow-y-auto p-3 space-y-1">
-          <div className="text-xs font-bold text-gray-400 uppercase px-3 mb-2 mt-2 tracking-wider">存储桶列表</div>
-          {buckets.map((bucket) => (
-            <button
-              key={bucket.id}
-              onClick={() => { setSelectedBucket(bucket.id); setPath([]); setSearchTerm(""); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200 group ${
-                selectedBucket === bucket.id
-                  ? "bg-blue-50 text-blue-700 font-medium shadow-sm" 
-                  : "text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              <div className={`w-2 h-2 rounded-full ${selectedBucket === bucket.id ? "bg-blue-500" : "bg-gray-300 group-hover:bg-gray-400"}`}></div>
-              <span className="truncate">{bucket.Name}</span>
-            </button>
-          ))}
-        </div>
+        {onClose ? (
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+            aria-label="关闭菜单"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        ) : null}
+      </div>
 
-        <div className="p-4 border-t border-gray-100 bg-gray-50/50 space-y-3">
-          <div className={`text-xs px-3 py-2 rounded-md border ${
-            connectionStatus === "connected" ? "bg-green-50 text-green-700 border-green-100" : 
-            connectionStatus === "checking" ? "bg-yellow-50 text-yellow-700 border-yellow-100" :
-            connectionStatus === "unbound" ? "bg-blue-50 text-blue-700 border-blue-100" : "bg-red-50 text-red-700 border-red-100"
-          }`}>
-            <div className="flex items-center gap-2">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        <div className="px-1">
+          <div className="text-xs font-bold text-gray-400 uppercase px-2 mt-2 tracking-wider dark:text-gray-400">存储桶</div>
+          <div className="relative mt-2">
+            <select
+              value={selectedBucket ?? ""}
+              onChange={(e) => selectBucket(e.target.value)}
+              disabled={buckets.length === 0}
+              className="w-full appearance-none rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100"
+            >
+              <option value="" disabled>
+                选择存储桶
+              </option>
+              {buckets.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.Name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+          </div>
+        </div>
+      </div>
+
+      <div className="p-4 border-t border-gray-100 bg-gray-50/50 space-y-3 dark:border-gray-800 dark:bg-gray-950/30">
+        <div
+          className={`text-xs px-3 py-2 rounded-md border ${
+            connectionStatus === "connected"
+              ? "bg-green-50 text-green-700 border-green-100 dark:bg-green-950/40 dark:text-green-200 dark:border-green-900"
+              : connectionStatus === "checking"
+                ? "bg-yellow-50 text-yellow-700 border-yellow-100 dark:bg-yellow-950/35 dark:text-yellow-200 dark:border-yellow-900"
+                : connectionStatus === "unbound"
+                  ? "bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-950/40 dark:text-blue-200 dark:border-blue-900"
+                  : "bg-red-50 text-red-700 border-red-100 dark:bg-red-950/40 dark:text-red-200 dark:border-red-900"
+          }`}
+        >
+          <div className="flex items-center gap-2">
             <Wifi className="w-3 h-3" />
             <span className="font-medium">
               {connectionStatus === "connected"
@@ -1569,189 +1656,465 @@ export default function R2Admin() {
                     ? "未绑定存储桶"
                     : "连接异常"}
             </span>
-            </div>
-            {connectionDetail ? (
-              <div className="mt-1 text-[10px] leading-relaxed opacity-80">{connectionDetail}</div>
-            ) : null}
           </div>
+          {connectionDetail ? (
+            <div className="mt-1 text-[10px] leading-relaxed opacity-80">{connectionDetail}</div>
+          ) : null}
+        </div>
 
-          <div className="px-3 py-2 rounded-md border border-gray-200 bg-white text-xs text-gray-600">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-medium truncate">当前桶占用估算</span>
-              <button
-                onClick={() => selectedBucket && fetchBucketUsage(selectedBucket)}
-                disabled={!selectedBucket || usageLoading}
-                className="text-[11px] text-blue-600 hover:text-blue-700 disabled:opacity-50"
-              >
-                {usageLoading ? "计算中..." : "刷新"}
-              </button>
-            </div>
-            <div className="mt-1.5 flex items-center justify-between">
-              <span className="text-[11px] text-gray-500">对象数</span>
-              <span className="text-[11px] font-semibold text-gray-800">
-                {bucketUsage ? (bucketUsage.truncated ? `≥${bucketUsage.objects}` : `${bucketUsage.objects}`) : "-"}
-              </span>
-            </div>
-            <div className="mt-1 flex items-center justify-between">
-              <span className="text-[11px] text-gray-500">容量</span>
-              <span className="text-[11px] font-semibold text-gray-800">
-                {bucketUsage ? (bucketUsage.truncated ? `≥${formatSize(bucketUsage.bytes)}` : formatSize(bucketUsage.bytes)) : "-"}
-              </span>
-            </div>
-            {bucketUsage?.truncated ? (
-              <div className="mt-1 text-[10px] text-gray-400">仅扫描前 {bucketUsage.pagesScanned} 页（每页最多 1000 项）</div>
-            ) : null}
+        <div className="px-3 py-2 rounded-md border border-gray-200 bg-white text-xs text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium truncate">当前桶占用估算</span>
+            <button
+              onClick={() => selectedBucket && fetchBucketUsage(selectedBucket)}
+              disabled={!selectedBucket || usageLoading}
+              className="text-[11px] text-blue-600 hover:text-blue-700 disabled:opacity-50 dark:text-blue-300 dark:hover:text-blue-200"
+            >
+              {usageLoading ? "计算中..." : "刷新"}
+            </button>
           </div>
-
-          <div className="px-3 py-2 rounded-md border border-gray-200 bg-white text-xs text-gray-600">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-medium truncate">账号总占用估算</span>
-              <button
-                onClick={() => fetchAccountUsageTotal(buckets)}
-                disabled={!buckets.length || accountUsageLoading}
-                className="text-[11px] text-blue-600 hover:text-blue-700 disabled:opacity-50"
-              >
-                {accountUsageLoading ? "计算中..." : "刷新"}
-              </button>
-            </div>
-            <div className="mt-1.5 flex items-center justify-between">
-              <span className="text-[11px] text-gray-500">桶数量</span>
-              <span className="text-[11px] font-semibold text-gray-800">{accountUsage ? accountUsage.buckets : "-"}</span>
-            </div>
-            <div className="mt-1 flex items-center justify-between">
-              <span className="text-[11px] text-gray-500">对象数</span>
-              <span className="text-[11px] font-semibold text-gray-800">
-                {accountUsage ? `${accountUsage.objects}` : "-"}
-              </span>
-            </div>
-            <div className="mt-1 flex items-center justify-between">
-              <span className="text-[11px] text-gray-500">容量</span>
-              <span className="text-[11px] font-semibold text-gray-800">
-                {accountUsage ? formatSize(accountUsage.bytes) : "-"}
-              </span>
-            </div>
-            {accountUsage?.truncatedBuckets ? (
-              <div className="mt-1 text-[10px] text-gray-400">有 {accountUsage.truncatedBuckets} 个桶为截断估算</div>
-            ) : null}
+          <div className="mt-1.5 flex items-center justify-between">
+            <span className="text-[11px] text-gray-500 dark:text-gray-400">对象数</span>
+            <span className="text-[11px] font-semibold text-gray-800 dark:text-gray-100">
+              {bucketUsage ? (bucketUsage.truncated ? `≥${bucketUsage.objects}` : `${bucketUsage.objects}`) : "-"}
+            </span>
           </div>
+          <div className="mt-1 flex items-center justify-between">
+            <span className="text-[11px] text-gray-500 dark:text-gray-400">容量</span>
+            <span className="text-[11px] font-semibold text-gray-800 dark:text-gray-100">
+              {bucketUsage ? (bucketUsage.truncated ? `≥${formatSize(bucketUsage.bytes)}` : formatSize(bucketUsage.bytes)) : "-"}
+            </span>
+          </div>
+          {bucketUsage?.truncated ? (
+            <div className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">仅扫描前 {bucketUsage.pagesScanned} 页（每页最多 1000 项）</div>
+          ) : null}
+        </div>
 
+        <div className="px-3 py-2 rounded-md border border-gray-200 bg-white text-xs text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium truncate">账号总占用估算</span>
+            <button
+              onClick={() => fetchAccountUsageTotal(buckets)}
+              disabled={!buckets.length || accountUsageLoading}
+              className="text-[11px] text-blue-600 hover:text-blue-700 disabled:opacity-50 dark:text-blue-300 dark:hover:text-blue-200"
+            >
+              {accountUsageLoading ? "计算中..." : "刷新"}
+            </button>
+          </div>
+          <div className="mt-1.5 flex items-center justify-between">
+            <span className="text-[11px] text-gray-500 dark:text-gray-400">桶数量</span>
+            <span className="text-[11px] font-semibold text-gray-800 dark:text-gray-100">{accountUsage ? accountUsage.buckets : "-"}</span>
+          </div>
+          <div className="mt-1 flex items-center justify-between">
+            <span className="text-[11px] text-gray-500 dark:text-gray-400">对象数</span>
+            <span className="text-[11px] font-semibold text-gray-800 dark:text-gray-100">{accountUsage ? `${accountUsage.objects}` : "-"}</span>
+          </div>
+          <div className="mt-1 flex items-center justify-between">
+            <span className="text-[11px] text-gray-500 dark:text-gray-400">容量</span>
+            <span className="text-[11px] font-semibold text-gray-800 dark:text-gray-100">
+              {accountUsage ? formatSize(accountUsage.bytes) : "-"}
+            </span>
+          </div>
+          {accountUsage?.truncatedBuckets ? (
+            <div className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">有 {accountUsage.truncatedBuckets} 个桶为截断估算</div>
+          ) : null}
+        </div>
+
+        <button
+          onClick={handleConfigureLinks}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-blue-600 hover:border-blue-200 rounded-lg text-xs font-medium transition-colors dark:bg-gray-900 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800 dark:hover:text-blue-200"
+        >
+          <Settings className="w-3 h-3" />
+          链接设置
+        </button>
+
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 rounded-lg text-xs font-medium transition-colors dark:bg-gray-900 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-red-950/40 dark:hover:text-red-200 dark:hover:border-red-900"
+        >
+          <LogOut className="w-3 h-3" />
+          退出登录
+        </button>
+      </div>
+    </div>
+  );
+
+  const DetailsPanel = ({ onClose }: { onClose?: () => void }) => (
+    <div className="h-full bg-white border-l border-gray-200 flex flex-col shadow-sm dark:bg-gray-900 dark:border-gray-800">
+      <div className="p-5 border-b border-gray-100 flex items-center justify-between gap-3 dark:border-gray-800">
+        <h2 className="font-bold text-gray-800 text-sm uppercase tracking-wide dark:text-gray-100">详细信息</h2>
+        {onClose ? (
           <button
-            onClick={handleConfigureLinks}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-blue-600 hover:border-blue-200 rounded-lg text-xs font-medium transition-colors"
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+            aria-label="关闭详情"
           >
-            <Settings className="w-3 h-3" />
-            链接设置
+            <X className="w-5 h-5" />
           </button>
+        ) : null}
+      </div>
 
-          <button 
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 rounded-lg text-xs font-medium transition-colors"
-          >
-            <LogOut className="w-3 h-3" />
-            退出登录
-          </button>
+      <div className="flex-1 overflow-y-auto p-6 space-y-8">
+        {selectedItem ? (
+          <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+            <div className="flex flex-col items-center">
+              <div className="w-24 h-24 bg-gray-50 rounded-2xl border border-gray-100 flex items-center justify-center mb-4 shadow-sm dark:bg-gray-950 dark:border-gray-800">
+                {getIcon(selectedItem.type, selectedItem.name)}
+              </div>
+              <h3 className="font-semibold text-gray-900 text-center break-all px-2 leading-snug dark:text-gray-100">{selectedItem.name}</h3>
+              <div className="mt-2 inline-flex items-center gap-2">
+                <span className="text-[10px] px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-600 font-semibold dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                  {getFileTag(selectedItem)}
+                </span>
+                {selectedItem.type === "file" ? (
+                  <span className="text-[10px] text-gray-400 font-medium dark:text-gray-400">{formatSize(selectedItem.size)}</span>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="space-y-0 text-sm border rounded-lg border-gray-100 overflow-hidden dark:border-gray-800">
+              <div className="flex justify-between p-3 bg-gray-50/50 border-b border-gray-100 dark:bg-gray-950/30 dark:border-gray-800">
+                <span className="text-gray-500 dark:text-gray-400">类型</span>
+                <span className="text-gray-900 font-medium dark:text-gray-100">{selectedItem.type === "folder" ? "文件夹" : "文件"}</span>
+              </div>
+              <div className="flex justify-between p-3 bg-white border-b border-gray-100 dark:bg-gray-900 dark:border-gray-800">
+                <span className="text-gray-500 dark:text-gray-400">大小</span>
+                <span className="text-gray-900 font-medium dark:text-gray-100">{formatSize(selectedItem.size)}</span>
+              </div>
+              <div className="flex justify-between p-3 bg-gray-50/50 dark:bg-gray-950/30">
+                <span className="text-gray-500 dark:text-gray-400">修改时间</span>
+                <span className="text-gray-900 font-medium text-right text-xs dark:text-gray-100">
+                  {selectedItem.lastModified ? new Date(selectedItem.lastModified).toLocaleDateString() : "-"}
+                </span>
+              </div>
+            </div>
+
+            {selectedItem.type === "folder" ? (
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  onClick={() => handleEnterFolder(selectedItem!.name)}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors col-span-2"
+                >
+                  <FolderOpen className="w-4 h-4" />
+                  打开文件夹
+                </button>
+                <button
+                  onClick={handleRename}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100 dark:hover:bg-gray-800 dark:hover:text-blue-200"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  重命名
+                </button>
+                <button
+                  onClick={() => handleMoveOrCopy("move")}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100 dark:hover:bg-gray-800 dark:hover:text-blue-200"
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                  移动
+                </button>
+                <button
+                  onClick={() => handleMoveOrCopy("copy")}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100 dark:hover:bg-gray-800 dark:hover:text-blue-200"
+                >
+                  <Copy className="w-4 h-4" />
+                  复制
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-red-600 hover:bg-red-50 hover:border-red-200 rounded-lg text-sm font-medium transition-colors dark:bg-gray-900 dark:border-gray-800 dark:text-red-200 dark:hover:bg-red-950/40 dark:hover:border-red-900"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  删除
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  onClick={() => previewItem(selectedItem!)}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors col-span-2"
+                >
+                  <Eye className="w-4 h-4" />
+                  预览
+                </button>
+                <button
+                  onClick={() => downloadItem(selectedItem!)}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100 dark:hover:bg-gray-800 dark:hover:text-blue-200"
+                >
+                  <Download className="w-4 h-4" />
+                  下载
+                </button>
+                <button
+                  onClick={handleRename}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100 dark:hover:bg-gray-800 dark:hover:text-blue-200"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  重命名
+                </button>
+                <button
+                  onClick={() => handleMoveOrCopy("move")}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100 dark:hover:bg-gray-800 dark:hover:text-blue-200"
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                  移动
+                </button>
+                <button
+                  onClick={() => handleMoveOrCopy("copy")}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100 dark:hover:bg-gray-800 dark:hover:text-blue-200"
+                >
+                  <Copy className="w-4 h-4" />
+                  复制
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-red-600 hover:bg-red-50 hover:border-red-200 rounded-lg text-sm font-medium transition-colors dark:bg-gray-900 dark:border-gray-800 dark:text-red-200 dark:hover:bg-red-950/40 dark:hover:border-red-900"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  删除
+                </button>
+                <button
+                  onClick={() => copyLinkForItem(selectedItem!, "public")}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100 dark:hover:bg-gray-800 dark:hover:text-blue-200"
+                >
+                  <Link2 className="w-4 h-4" />
+                  公共链接
+                </button>
+                <button
+                  onClick={() => copyLinkForItem(selectedItem!, "custom")}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100 dark:hover:bg-gray-800 dark:hover:text-blue-200"
+                >
+                  <Link2 className="w-4 h-4" />
+                  自定义链接
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 dark:bg-gray-950">
+              <Search className="w-6 h-6 text-gray-300 dark:text-gray-600" />
+            </div>
+            <p className="text-gray-500 text-sm dark:text-gray-400">
+              选择一个文件以查看详情
+              <br />
+              或进行管理
+            </p>
+          </div>
+        )}
+
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100 dark:from-blue-950/35 dark:to-indigo-950/25 dark:border-blue-900">
+          <h3 className="text-[10px] font-bold text-blue-800 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+            当前视图统计
+          </h3>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-500 dark:text-gray-400">文件数</span>
+              <span className="text-sm font-bold text-gray-800 dark:text-gray-100">{currentViewStats.fileCount}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-500 dark:text-gray-400">文件夹数</span>
+              <span className="text-sm font-bold text-gray-800 dark:text-gray-100">{currentViewStats.folderCount}</span>
+            </div>
+            <div className="h-px bg-blue-200/50 my-2 dark:bg-blue-900/50"></div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-500 dark:text-gray-400">总大小</span>
+              <span className="text-sm font-bold text-blue-700 dark:text-blue-200">{formatSize(currentViewStats.totalSize)}</span>
+            </div>
+          </div>
         </div>
       </div>
 
+      <div className="p-4 border-t border-gray-100 bg-gray-50 text-[10px] text-gray-400 text-center dark:border-gray-800 dark:bg-gray-950/30 dark:text-gray-400">
+        <p>Qing&apos;s R2 Admin</p>
+        <p className="mt-0.5">Serverless R2 Manager</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex h-dvh md:h-screen bg-gray-50 text-gray-900 font-sans overflow-hidden dark:bg-gray-950 dark:text-gray-100">
+      {/* 移动端：左侧抽屉 */}
+      <div className={`fixed inset-0 z-50 md:hidden ${mobileNavOpen ? "" : "pointer-events-none"}`}>
+        <button
+          type="button"
+          aria-label="关闭菜单"
+          onClick={() => setMobileNavOpen(false)}
+          className={`absolute inset-0 bg-black/40 transition-opacity ${mobileNavOpen ? "opacity-100" : "opacity-0"}`}
+        />
+        <div
+          className={`absolute inset-y-0 left-0 w-[18rem] max-w-[85vw] transition-transform duration-200 ${
+            mobileNavOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <SidebarPanel onClose={() => setMobileNavOpen(false)} />
+        </div>
+      </div>
+
+      {/* 桌面端：左侧栏 */}
+      <div className="hidden md:flex w-64 shrink-0">
+        <SidebarPanel />
+      </div>
+
       {/* 中间：文件浏览器 */}
-      <div className="flex-1 flex flex-col min-w-0 bg-white">
+      <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-900">
         {/* 顶部工具栏 */}
-        <div className="h-16 border-b border-gray-200 flex items-center justify-between px-6 bg-white shrink-0">
-          <div className="flex items-center gap-1 text-sm text-gray-600 overflow-hidden mr-4">
-            <button onClick={() => { setPath([]); setSearchTerm(""); }} className="hover:bg-gray-100 p-1.5 rounded-md transition-colors text-gray-500 flex items-center gap-1">
-              <Home className="w-4 h-4" />
-              <span className="hidden sm:inline text-xs font-medium text-gray-600">根目录</span>
-            </button>
-            {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300" />}
-            {path.map((folder, idx) => (
-              <React.Fragment key={idx}>
-                <button 
-                  onClick={() => handleBreadcrumbClick(idx)}
-                  className="hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors font-medium truncate max-w-[120px]"
+        <div className="border-b border-gray-200 bg-white shrink-0 dark:border-gray-800 dark:bg-gray-900">
+          <div className="flex items-center justify-between gap-3 px-4 md:px-6 py-3">
+            <div className="flex items-center gap-2 text-sm text-gray-600 min-w-0 mr-2 dark:text-gray-300">
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(true)}
+                className="md:hidden p-3 -ml-1 rounded-lg text-gray-600 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                aria-label="打开菜单"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-1 overflow-hidden">
+                <button
+                  onClick={() => {
+                    setPath([]);
+                    setSearchTerm("");
+                  }}
+                  className="hover:bg-gray-100 p-2 rounded-md transition-colors text-gray-500 flex items-center gap-1 dark:text-gray-300 dark:hover:bg-gray-800"
                 >
-                  {folder}
+                  <Home className="w-4 h-4" />
+                  <span className="hidden sm:inline text-xs font-medium text-gray-600 dark:text-gray-300">根目录</span>
                 </button>
-                {idx < path.length - 1 && <ChevronRight className="w-4 h-4 text-gray-300" />}
-              </React.Fragment>
-            ))}
+                {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
+                {path.map((folder, idx) => (
+                  <React.Fragment key={idx}>
+                    <button
+                      onClick={() => handleBreadcrumbClick(idx)}
+                      className="hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors font-medium truncate max-w-[120px] dark:hover:text-blue-200 dark:hover:bg-blue-950/30"
+                    >
+                      {folder}
+                    </button>
+                    {idx < path.length - 1 && (
+                      <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 md:gap-3 shrink-0">
+              <div className="relative hidden md:block">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+                <input
+                  type="text"
+                  placeholder="桶内全局搜索..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 pr-9 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 w-48 transition-all dark:bg-gray-950 dark:border-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
+                />
+                {searchLoading ? (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <RefreshCw className="w-4 h-4 text-gray-400 animate-spin dark:text-gray-500" />
+                  </div>
+                ) : null}
+              </div>
+              <div className="h-6 w-px bg-gray-200 mx-1 hidden md:block dark:bg-gray-800"></div>
+              <button
+                type="button"
+                onClick={() =>
+                  setThemeMode((prev) =>
+                    prev === "system" ? (resolvedDark ? "light" : "dark") : prev === "dark" ? "light" : "system",
+                  )
+                }
+                className="p-3 md:p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors dark:text-gray-300 dark:hover:bg-gray-800"
+                title={
+                  themeMode === "system" ? "主题：跟随系统" : themeMode === "dark" ? "主题：深色" : "主题：浅色"
+                }
+                aria-label="切换主题"
+              >
+                {themeMode === "dark" ? (
+                  <Moon className="w-4 h-4" />
+                ) : themeMode === "light" ? (
+                  <Sun className="w-4 h-4" />
+                ) : (
+                  <Monitor className="w-4 h-4" />
+                )}
+              </button>
+              <button
+                onClick={() => selectedBucket && fetchFiles(selectedBucket, path)}
+                disabled={!selectedBucket}
+                className="p-3 md:p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                title="刷新"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+              </button>
+              <button
+                onClick={handleBatchDownload}
+                disabled={selectedKeys.size === 0}
+                className="p-3 md:p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                title="批量下载（所选文件）"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+              <button
+                onClick={openBatchMove}
+                disabled={selectedKeys.size === 0}
+                className="p-3 md:p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                title="批量移动（所选文件）"
+              >
+                <ArrowRightLeft className="w-4 h-4" />
+              </button>
+              <button
+                onClick={openMkdir}
+                disabled={!selectedBucket || !!searchTerm.trim()}
+                className="p-3 md:p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                title={searchTerm.trim() ? "搜索中无法新建文件夹" : "新建文件夹"}
+              >
+                <FolderPlus className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => {
+                  if (!selectedBucket) return;
+                  if (uploadTasks.length > 0) setUploadPanelOpen(true);
+                  else fileInputRef.current?.click();
+                }}
+                disabled={!selectedBucket}
+                className="flex items-center gap-2 px-4 py-2.5 md:py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {uploadSummary.active > 0 ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>{uploadSummary.pct}%</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    <span>上传</span>
+                  </>
+                )}
+              </button>
+              <input type="file" multiple ref={fileInputRef} className="hidden" onChange={handleUpload} />
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="relative hidden md:block">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input 
-                type="text" 
-                placeholder="桶内全局搜索..." 
+          <div className="px-4 pb-3 md:hidden">
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+              <input
+                type="text"
+                placeholder="桶内全局搜索..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 pr-4 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 w-48 transition-all"
+                className="w-full pl-9 pr-9 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all dark:bg-gray-950 dark:border-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
               />
               {searchLoading ? (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <RefreshCw className="w-4 h-4 text-gray-400 animate-spin" />
+                  <RefreshCw className="w-4 h-4 text-gray-400 animate-spin dark:text-gray-500" />
                 </div>
               ) : null}
             </div>
-            <div className="h-6 w-px bg-gray-200 mx-1"></div>
-            <button 
-              onClick={() => selectedBucket && fetchFiles(selectedBucket, path)} 
-              disabled={!selectedBucket}
-              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="刷新"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-            </button>
-            <button
-              onClick={handleBatchDownload}
-              disabled={selectedKeys.size === 0}
-              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="批量下载（所选文件）"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-            <button
-              onClick={openBatchMove}
-              disabled={selectedKeys.size === 0}
-              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="批量移动（所选文件）"
-            >
-              <ArrowRightLeft className="w-4 h-4" />
-            </button>
-            <button
-              onClick={openMkdir}
-              disabled={!selectedBucket || !!searchTerm.trim()}
-              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title={searchTerm.trim() ? "搜索中无法新建文件夹" : "新建文件夹"}
-            >
-              <FolderPlus className="w-4 h-4" />
-            </button>
-            <button 
-              onClick={() => {
-                if (!selectedBucket) return;
-                if (uploadTasks.length > 0) setUploadPanelOpen(true);
-                else fileInputRef.current?.click();
-              }}
-              disabled={!selectedBucket}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {uploadSummary.active > 0 ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>{uploadSummary.pct}%</span>
-                </>
-              ) : (
-                <>
-                  <Upload className="w-4 h-4" />
-                  <span>上传</span>
-                </>
-              )}
-            </button>
-            <input type="file" multiple ref={fileInputRef} className="hidden" onChange={handleUpload} />
           </div>
         </div>
 
         {loading || searchLoading ? (
-          <div className="h-1 w-full bg-blue-100">
+          <div className="h-1 w-full bg-blue-100 dark:bg-blue-950/40">
             <div className="h-1 w-1/3 bg-blue-500 animate-pulse" />
           </div>
         ) : (
@@ -1760,19 +2123,19 @@ export default function R2Admin() {
 
         {/* 文件列表 */}
         <div
-          className={`flex-1 overflow-y-auto p-6 bg-gray-50/30 ${loading ? "pointer-events-none" : ""}`}
+          className={`flex-1 overflow-y-auto p-4 md:p-6 bg-gray-50/30 dark:bg-gray-950/25 ${loading ? "pointer-events-none" : ""}`}
           onClick={() => {
             setSelectedItem(null);
           }}
         >
           {connectionStatus === "unbound" ? (
             <div className="h-full flex items-center justify-center">
-              <div className="w-full max-w-2xl bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
+              <div className="w-full max-w-2xl bg-white border border-gray-200 rounded-2xl shadow-sm p-6 dark:bg-gray-900 dark:border-gray-800">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <div className="text-sm font-semibold text-gray-800">未绑定存储桶</div>
-                    <div className="mt-1 text-sm text-gray-500 leading-relaxed">
-                      这个站点使用 Cloudflare Pages 的 <span className="font-semibold text-gray-700">R2 绑定</span> 来管理文件；
+                    <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">未绑定存储桶</div>
+                    <div className="mt-1 text-sm text-gray-500 leading-relaxed dark:text-gray-300">
+                      这个站点使用 Cloudflare Pages 的 <span className="font-semibold text-gray-700 dark:text-gray-200">R2 绑定</span> 来管理文件；
                       你需要先在 Pages 项目里绑定至少 1 个 R2 存储桶。
                     </div>
                   </div>
@@ -1785,9 +2148,9 @@ export default function R2Admin() {
                 </div>
 
                 <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                    <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">绑定步骤（中文界面）</div>
-                    <ol className="mt-3 space-y-2 text-sm text-gray-700 list-decimal pl-5">
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950/30">
+                    <div className="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-400">绑定步骤（中文界面）</div>
+                    <ol className="mt-3 space-y-2 text-sm text-gray-700 list-decimal pl-5 dark:text-gray-200">
                       <li>进入 Cloudflare Pages 项目</li>
                       <li>点击「设置」→「绑定」</li>
                       <li>点击「添加」中选择「R2 存储桶」</li>
@@ -1796,38 +2159,38 @@ export default function R2Admin() {
                     </ol>
                   </div>
 
-                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                    <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">示例绑定名</div>
-                    <div className="mt-3 text-sm text-gray-700 leading-relaxed space-y-2">
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950/30">
+                    <div className="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-400">示例绑定名</div>
+                    <div className="mt-3 text-sm text-gray-700 leading-relaxed space-y-2 dark:text-gray-200">
                       <div className="flex items-center justify-between gap-3">
                         <span className="font-medium">博客桶</span>
-                        <code className="px-2 py-1 rounded bg-white border border-gray-200 text-xs">R2_BLOG</code>
+                        <code className="px-2 py-1 rounded bg-white border border-gray-200 text-xs dark:bg-gray-900 dark:border-gray-800">R2_BLOG</code>
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <span className="font-medium">云盘桶</span>
-                        <code className="px-2 py-1 rounded bg-white border border-gray-200 text-xs">R2_CLOUD</code>
+                        <code className="px-2 py-1 rounded bg-white border border-gray-200 text-xs dark:bg-gray-900 dark:border-gray-800">R2_CLOUD</code>
                       </div>
-                      <div className="text-[12px] text-gray-500">
-                        建议以 <code className="px-1.5 py-0.5 rounded bg-white border border-gray-200 text-[11px]">R2_</code> 开头，便于自动识别与切换。
+                      <div className="text-[12px] text-gray-500 dark:text-gray-400">
+                        建议以 <code className="px-1.5 py-0.5 rounded bg-white border border-gray-200 text-[11px] dark:bg-gray-900 dark:border-gray-800">R2_</code> 开头，便于自动识别与切换。
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-                  <div className="text-xs font-semibold text-gray-600">可选配置</div>
-                  <ul className="mt-2 text-sm text-gray-700 space-y-1.5 list-disc pl-5">
+                <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                  <div className="text-xs font-semibold text-gray-600 dark:text-gray-200">可选配置</div>
+                  <ul className="mt-2 text-sm text-gray-700 space-y-1.5 list-disc pl-5 dark:text-gray-200">
                     <li>
                       显示中文桶名：设置环境变量{" "}
-                      <code className="px-1.5 py-0.5 rounded bg-gray-50 border border-gray-200 text-[11px]">R2_BUCKETS</code>{" "}
+                      <code className="px-1.5 py-0.5 rounded bg-gray-50 border border-gray-200 text-[11px] dark:bg-gray-950 dark:border-gray-800">R2_BUCKETS</code>{" "}
                       ，例如{" "}
-                      <code className="px-1.5 py-0.5 rounded bg-gray-50 border border-gray-200 text-[11px]">
+                      <code className="px-1.5 py-0.5 rounded bg-gray-50 border border-gray-200 text-[11px] dark:bg-gray-950 dark:border-gray-800">
                         R2_BLOG:博客,R2_CLOUD:云盘
                       </code>
                     </li>
                     <li>
                       访问密码：设置环境变量{" "}
-                      <code className="px-1.5 py-0.5 rounded bg-gray-50 border border-gray-200 text-[11px]">ADMIN_PASSWORD</code>{" "}
+                      <code className="px-1.5 py-0.5 rounded bg-gray-50 border border-gray-200 text-[11px] dark:bg-gray-950 dark:border-gray-800">ADMIN_PASSWORD</code>{" "}
                       （未设置则不会弹出登录页）
                     </li>
                   </ul>
@@ -1835,16 +2198,16 @@ export default function R2Admin() {
               </div>
             </div>
           ) : filteredFiles.length === 0 && !loading && !searchLoading ? (
-            <div className="h-full flex flex-col items-center justify-center text-gray-400">
-              <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-                <Folder className="w-10 h-10 text-gray-300" />
+            <div className="h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-400">
+              <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-4 dark:bg-gray-950">
+                <Folder className="w-10 h-10 text-gray-300 dark:text-gray-600" />
               </div>
               <p className="text-sm font-medium">{searchTerm.trim() ? "未找到匹配内容" : "文件夹为空"}</p>
             </div>
           ) : (
             <>
-                <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-                  <div className="flex items-center px-4 py-2.5 text-[11px] font-semibold text-gray-500 bg-gray-50 border-b border-gray-200">
+                <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm dark:bg-gray-900 dark:border-gray-800">
+                  <div className="flex items-center px-4 py-3 sm:py-2.5 text-[11px] font-semibold text-gray-500 bg-gray-50 border-b border-gray-200 dark:bg-gray-950/30 dark:border-gray-800 dark:text-gray-400">
                     <div className="w-10 flex items-center justify-center">
                       <input
                         type="checkbox"
@@ -1860,13 +2223,13 @@ export default function R2Admin() {
                           setSelectedKeys(next);
                         }}
                         onClick={(e) => e.stopPropagation()}
-                        className="w-4 h-4"
+                        className="w-5 h-5 sm:w-4 sm:h-4"
                       />
                     </div>
                     <div className="flex-1">名称</div>
-                    <div className="w-28 text-right">大小</div>
+                    <div className="w-28 text-right hidden sm:block">大小</div>
                     <div className="w-28 text-right hidden md:block">修改时间</div>
-                    <div className="w-40 text-right">操作</div>
+                    <div className="w-40 text-right hidden sm:block">操作</div>
                   </div>
                   <div>
                     {filteredFiles.map((file) => {
@@ -1883,8 +2246,8 @@ export default function R2Admin() {
                             if (file.type === "folder") handleEnterFolder(file.name);
                             else previewItem(file);
                           }}
-                          className={`group flex items-center px-4 py-2.5 text-sm border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${
-                            selectedItem?.key === file.key ? "bg-blue-50" : "bg-white"
+                          className={`group flex items-center px-4 py-3 sm:py-2.5 text-sm border-b border-gray-100 hover:bg-gray-50 cursor-pointer dark:border-gray-800 dark:hover:bg-gray-800 ${
+                            selectedItem?.key === file.key ? "bg-blue-50 dark:bg-blue-950/30" : "bg-white dark:bg-gray-900"
                           }`}
                         >
                           <div className="w-10 flex items-center justify-center">
@@ -1898,25 +2261,25 @@ export default function R2Admin() {
                                 setSelectedKeys(next);
                               }}
                               onClick={(e) => e.stopPropagation()}
-                              className="w-4 h-4"
+                              className="w-5 h-5 sm:w-4 sm:h-4"
                             />
                           </div>
                           <div className="flex-1 min-w-0 flex items-center gap-2">
                             <div className="shrink-0">{getIcon(file.type, file.name, "sm")}</div>
                             <div className="min-w-0 flex items-center gap-2">
-                              <div className="truncate" title={file.name}>{file.name}</div>
-                              <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-600 font-semibold">
+                          <div className="truncate" title={file.name}>{file.name}</div>
+                              <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-600 font-semibold dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
                                 {getFileTag(file)}
                               </span>
                             </div>
                           </div>
-                          <div className="w-28 text-right text-xs text-gray-500">
+                          <div className="w-28 text-right text-xs text-gray-500 hidden sm:block dark:text-gray-400">
                             {file.type === "folder" ? "-" : formatSize(file.size)}
                           </div>
-                          <div className="w-28 text-right text-xs text-gray-500 hidden md:block">
+                          <div className="w-28 text-right text-xs text-gray-500 hidden md:block dark:text-gray-400">
                             {file.lastModified ? new Date(file.lastModified).toLocaleDateString() : "-"}
                           </div>
-                          <div className="w-40 flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="w-40 hidden sm:flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             {file.type === "folder" ? (
                               <>
                                 <button
@@ -1924,7 +2287,7 @@ export default function R2Admin() {
                                     e.stopPropagation();
                                     handleEnterFolder(file.name);
                                   }}
-                                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                                  className="p-3 sm:p-2 rounded-lg hover:bg-gray-100 text-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
                                   title="打开"
                                 >
                                   <FolderOpen className="w-4 h-4" />
@@ -1934,7 +2297,7 @@ export default function R2Admin() {
                                     e.stopPropagation();
                                     openRenameFor(file);
                                   }}
-                                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                                  className="p-3 sm:p-2 rounded-lg hover:bg-gray-100 text-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
                                   title="重命名"
                                 >
                                   <Edit2 className="w-4 h-4" />
@@ -1944,7 +2307,7 @@ export default function R2Admin() {
                                     e.stopPropagation();
                                     openMoveFor(file, "move");
                                   }}
-                                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                                  className="p-3 sm:p-2 rounded-lg hover:bg-gray-100 text-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
                                   title="移动"
                                 >
                                   <ArrowRightLeft className="w-4 h-4" />
@@ -1957,7 +2320,7 @@ export default function R2Admin() {
                                     e.stopPropagation();
                                     downloadItem(file);
                                   }}
-                                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                                  className="p-3 sm:p-2 rounded-lg hover:bg-gray-100 text-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
                                   title="下载"
                                 >
                                   <Download className="w-4 h-4" />
@@ -1967,7 +2330,7 @@ export default function R2Admin() {
                                     e.stopPropagation();
                                     openRenameFor(file);
                                   }}
-                                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                                  className="p-3 sm:p-2 rounded-lg hover:bg-gray-100 text-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
                                   title="重命名"
                                 >
                                   <Edit2 className="w-4 h-4" />
@@ -1977,7 +2340,7 @@ export default function R2Admin() {
                                     e.stopPropagation();
                                     openMoveFor(file, "move");
                                   }}
-                                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                                  className="p-3 sm:p-2 rounded-lg hover:bg-gray-100 text-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
                                   title="移动"
                                 >
                                   <ArrowRightLeft className="w-4 h-4" />
@@ -1995,7 +2358,33 @@ export default function R2Admin() {
         </div>
       </div>
 
-      {/* 右侧：信息面板 */}
+      {/* 桌面端：右侧信息面板 */}
+      <div className="hidden lg:flex w-80 shrink-0">
+        <DetailsPanel />
+      </div>
+
+      {/* 移动端：详情底部弹窗 */}
+      <div className={`fixed inset-0 z-50 lg:hidden ${mobileDetailOpen ? "" : "pointer-events-none"}`}>
+        <button
+          type="button"
+          aria-label="关闭详情"
+          onClick={() => setMobileDetailOpen(false)}
+          className={`absolute inset-0 bg-black/40 transition-opacity ${mobileDetailOpen ? "opacity-100" : "opacity-0"}`}
+        />
+        <div
+          className={`absolute inset-x-0 bottom-0 transition-transform duration-200 ${
+            mobileDetailOpen ? "translate-y-0" : "translate-y-full"
+          }`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="h-[85dvh] bg-white rounded-t-2xl shadow-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+            <DetailsPanel onClose={() => setMobileDetailOpen(false)} />
+          </div>
+        </div>
+      </div>
+
+      {/* 旧版：右侧信息面板（已弃用） */}
+      {false ? (
       <div className="w-80 bg-white border-l border-gray-200 flex flex-col shadow-sm z-10">
         <div className="p-5 border-b border-gray-100">
           <h2 className="font-bold text-gray-800 text-sm uppercase tracking-wide">详细信息</h2>
@@ -2006,15 +2395,15 @@ export default function R2Admin() {
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
               <div className="flex flex-col items-center">
                 <div className="w-24 h-24 bg-gray-50 rounded-2xl border border-gray-100 flex items-center justify-center mb-4 shadow-sm">
-                  {getIcon(selectedItem.type, selectedItem.name)}
+                  {getIcon(selectedItem!.type, selectedItem!.name)}
                 </div>
-                <h3 className="font-semibold text-gray-900 text-center break-all px-2 leading-snug">{selectedItem.name}</h3>
+                <h3 className="font-semibold text-gray-900 text-center break-all px-2 leading-snug">{selectedItem!.name}</h3>
                 <div className="mt-2 inline-flex items-center gap-2">
                   <span className="text-[10px] px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-600 font-semibold">
-                    {getFileTag(selectedItem)}
+                    {getFileTag(selectedItem!)}
                   </span>
-                  {selectedItem.type === "file" ? (
-                    <span className="text-[10px] text-gray-400 font-medium">{formatSize(selectedItem.size)}</span>
+                  {selectedItem!.type === "file" ? (
+                    <span className="text-[10px] text-gray-400 font-medium">{formatSize(selectedItem!.size)}</span>
                   ) : null}
                 </div>
               </div>
@@ -2022,24 +2411,24 @@ export default function R2Admin() {
               <div className="space-y-0 text-sm border rounded-lg border-gray-100 overflow-hidden">
                 <div className="flex justify-between p-3 bg-gray-50/50 border-b border-gray-100">
                   <span className="text-gray-500">类型</span>
-                  <span className="text-gray-900 font-medium">{selectedItem.type === "folder" ? "文件夹" : "文件"}</span>
+                  <span className="text-gray-900 font-medium">{selectedItem!.type === "folder" ? "文件夹" : "文件"}</span>
                 </div>
                 <div className="flex justify-between p-3 bg-white border-b border-gray-100">
                   <span className="text-gray-500">大小</span>
-                  <span className="text-gray-900 font-medium">{formatSize(selectedItem.size)}</span>
+                  <span className="text-gray-900 font-medium">{formatSize(selectedItem!.size)}</span>
                 </div>
                 <div className="flex justify-between p-3 bg-gray-50/50">
                   <span className="text-gray-500">修改时间</span>
                   <span className="text-gray-900 font-medium text-right text-xs">
-                    {selectedItem.lastModified ? new Date(selectedItem.lastModified).toLocaleDateString() : "-"}
+                    {selectedItem!.lastModified ? new Date(selectedItem!.lastModified as string).toLocaleDateString() : "-"}
                   </span>
                 </div>
               </div>
 
-              {selectedItem.type === "folder" ? (
+              {selectedItem!.type === "folder" ? (
                 <div className="grid grid-cols-2 gap-3 pt-2">
                   <button
-                    onClick={() => handleEnterFolder(selectedItem.name)}
+                    onClick={() => handleEnterFolder(selectedItem!.name)}
                     className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors col-span-2"
                   >
                     <FolderOpen className="w-4 h-4" />
@@ -2074,14 +2463,14 @@ export default function R2Admin() {
                     删除
                   </button>
                   <button
-                    onClick={() => copyLinkForItem(selectedItem, "public")}
+                    onClick={() => copyLinkForItem(selectedItem!, "public")}
                     className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors"
                   >
                     <Link2 className="w-4 h-4" />
                     公共链接
                   </button>
                   <button
-                    onClick={() => copyLinkForItem(selectedItem, "custom")}
+                    onClick={() => copyLinkForItem(selectedItem!, "custom")}
                     className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors"
                   >
                     <Link2 className="w-4 h-4" />
@@ -2091,14 +2480,14 @@ export default function R2Admin() {
               ) : (
                 <div className="grid grid-cols-2 gap-3 pt-2">
                   <button
-                    onClick={() => previewItem(selectedItem)}
+                    onClick={() => previewItem(selectedItem!)}
                     className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors col-span-2"
                   >
                     <Eye className="w-4 h-4" />
                     预览
                   </button>
                   <button
-                    onClick={() => downloadItem(selectedItem)}
+                    onClick={() => downloadItem(selectedItem!)}
                     className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors"
                   >
                     <Download className="w-4 h-4" />
@@ -2133,14 +2522,14 @@ export default function R2Admin() {
                     删除
                   </button>
                   <button
-                    onClick={() => copyLinkForItem(selectedItem, "public")}
+                    onClick={() => copyLinkForItem(selectedItem!, "public")}
                     className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors"
                   >
                     <Link2 className="w-4 h-4" />
                     公共链接
                   </button>
                   <button
-                    onClick={() => copyLinkForItem(selectedItem, "custom")}
+                    onClick={() => copyLinkForItem(selectedItem!, "custom")}
                     className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors"
                   >
                     <Link2 className="w-4 h-4" />
@@ -2186,6 +2575,7 @@ export default function R2Admin() {
           <p className="mt-0.5">Serverless R2 Manager</p>
         </div>
       </div>
+      ) : null}
 
       <Modal
         open={mkdirOpen}
@@ -2196,7 +2586,7 @@ export default function R2Admin() {
           <div className="flex justify-end gap-2">
             <button
               onClick={() => { setMkdirOpen(false); setMkdirName(""); }}
-              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium"
+              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800"
             >
               取消
             </button>
@@ -2209,11 +2599,11 @@ export default function R2Admin() {
           </div>
         }
       >
-        <label className="block text-sm font-medium text-gray-700 mb-2">文件夹名称</label>
+        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">文件夹名称</label>
         <input
           value={mkdirName}
           onChange={(e) => setMkdirName(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none dark:bg-gray-950 dark:border-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
           placeholder="例如：images"
         />
       </Modal>
@@ -2227,7 +2617,7 @@ export default function R2Admin() {
           <div className="flex justify-end gap-2">
             <button
               onClick={() => setRenameOpen(false)}
-              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium"
+              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800"
             >
               取消
             </button>
@@ -2240,11 +2630,11 @@ export default function R2Admin() {
           </div>
         }
       >
-        <label className="block text-sm font-medium text-gray-700 mb-2">新名称</label>
+        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">新名称</label>
         <input
           value={renameValue}
           onChange={(e) => setRenameValue(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none dark:bg-gray-950 dark:border-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
           placeholder="输入新名称"
         />
       </Modal>
@@ -2264,7 +2654,7 @@ export default function R2Admin() {
           <div className="flex justify-end gap-2">
             <button
               onClick={() => { setMoveOpen(false); setMoveSources([]); }}
-              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium"
+              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800"
             >
               取消
             </button>
@@ -2277,14 +2667,14 @@ export default function R2Admin() {
           </div>
         }
       >
-        <label className="block text-sm font-medium text-gray-700 mb-2">目标路径</label>
+        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">目标路径</label>
         <input
           value={moveTarget}
           onChange={(e) => setMoveTarget(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none dark:bg-gray-950 dark:border-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
           placeholder="例如：photos/ 或 a/b/c/"
         />
-        <div className="mt-2 text-xs text-gray-500">以 `/` 结尾表示目标目录；不以 `/` 结尾表示目标 Key。</div>
+        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">以 `/` 结尾表示目标目录；不以 `/` 结尾表示目标 Key。</div>
       </Modal>
 
       <Modal
@@ -2296,7 +2686,7 @@ export default function R2Admin() {
           <div className="flex justify-end gap-2">
             <button
               onClick={() => setLinkOpen(false)}
-              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium"
+              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800"
             >
               取消
             </button>
@@ -2311,24 +2701,24 @@ export default function R2Admin() {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">公共开发 URL（可选）</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">公共开发 URL（可选）</label>
             <input
               value={linkPublic}
               onChange={(e) => setLinkPublic(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none dark:bg-gray-950 dark:border-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
               placeholder="例如：pub-xxxx.r2.dev"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">自定义域名（可选）</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">自定义域名（可选）</label>
             <input
               value={linkCustom}
               onChange={(e) => setLinkCustom(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none dark:bg-gray-950 dark:border-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
               placeholder="例如：media.example.com"
             />
           </div>
-          <div className="text-xs text-gray-500">支持不带协议；会自动补全为 `https://` 并保证以 `/` 结尾。</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">支持不带协议；会自动补全为 `https://` 并保证以 `/` 结尾。</div>
         </div>
       </Modal>
 
@@ -2341,7 +2731,7 @@ export default function R2Admin() {
           <div className="flex justify-end gap-2">
             <button
               onClick={() => setDeleteOpen(false)}
-              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium"
+              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800"
             >
               取消
             </button>
@@ -2354,7 +2744,7 @@ export default function R2Admin() {
           </div>
         }
       >
-        <div className="text-sm text-gray-700">
+        <div className="text-sm text-gray-700 dark:text-gray-200">
           此操作不可恢复。{selectedItem?.type === "folder" ? "（文件夹会递归删除前缀下的所有对象）" : null}
         </div>
       </Modal>
@@ -2373,9 +2763,9 @@ export default function R2Admin() {
           </button>
 
           {uploadPanelOpen ? (
-            <div className="fixed bottom-20 right-5 z-40 w-[420px] max-w-[calc(100vw-2.5rem)] bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                <div className="text-sm font-semibold text-gray-900">上传任务</div>
+            <div className="fixed bottom-20 right-5 z-40 w-[420px] max-w-[calc(100vw-2.5rem)] bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between dark:border-gray-800">
+                <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">上传任务</div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => fileInputRef.current?.click()}
@@ -2387,37 +2777,37 @@ export default function R2Admin() {
                     onClick={() =>
                       setUploadTasks((prev) => prev.filter((t) => t.status === "queued" || t.status === "uploading" || t.status === "paused"))
                     }
-                    className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-xs font-medium"
+                    className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-xs font-medium dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800"
                   >
                     清理已完成
                   </button>
                   <button
                     onClick={() => setUploadPanelOpen(false)}
-                    className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"
+                    className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
                     title="关闭"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
               </div>
-              <div className="max-h-[50vh] overflow-auto divide-y divide-gray-100">
+              <div className="max-h-[50vh] overflow-auto divide-y divide-gray-100 dark:divide-gray-800">
                 {uploadTasks.map((t) => {
                   const pct = t.file.size ? Math.min(100, Math.round((Math.min(t.loaded, t.file.size) / t.file.size) * 100)) : 0;
                   return (
                     <div key={t.id} className="px-4 py-3">
 	                      <div className="flex items-start justify-between gap-3">
 	                        <div className="min-w-0">
-	                          <div className="text-sm font-medium text-gray-900 truncate" title={t.key}>
+	                          <div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100" title={t.key}>
 	                            {t.file.name}
 	                          </div>
-	                          <div className="mt-0.5 text-[11px] text-gray-500 truncate" title={`${t.bucket}/${t.key}`}>
+	                          <div className="mt-0.5 text-[11px] text-gray-500 truncate dark:text-gray-400" title={`${t.bucket}/${t.key}`}>
 	                            {t.bucket}/{t.key}
 	                          </div>
 	                        </div>
 	                        <div className="shrink-0 flex items-center gap-2">
 	                          <div className="text-right">
-	                            <div className="text-xs font-semibold text-gray-800">{pct}%</div>
-	                            <div className="text-[11px] text-gray-500">
+	                            <div className="text-xs font-semibold text-gray-800 dark:text-gray-100">{pct}%</div>
+	                            <div className="text-[11px] text-gray-500 dark:text-gray-400">
 	                              {t.status === "uploading" ? formatSpeed(t.speedBps) : t.status}
 	                            </div>
 	                          </div>
@@ -2425,14 +2815,14 @@ export default function R2Admin() {
 	                            <>
 	                              <button
 	                                onClick={() => pauseUploadTask(t.id)}
-	                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+	                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
 	                                title="暂停"
 	                              >
 	                                <Pause className="w-4 h-4" />
 	                              </button>
 	                              <button
 	                                onClick={() => cancelUploadTask(t.id)}
-	                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+	                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
 	                                title="取消"
 	                              >
 	                                <CircleX className="w-4 h-4" />
@@ -2442,14 +2832,14 @@ export default function R2Admin() {
 	                            <>
 	                              <button
 	                                onClick={() => resumeUploadTask(t.id)}
-	                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+	                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
 	                                title="继续"
 	                              >
 	                                <Play className="w-4 h-4" />
 	                              </button>
 	                              <button
 	                                onClick={() => cancelUploadTask(t.id)}
-	                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+	                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
 	                                title="取消"
 	                              >
 	                                <CircleX className="w-4 h-4" />
@@ -2458,7 +2848,7 @@ export default function R2Admin() {
 	                          ) : t.status === "queued" ? (
 	                            <button
 	                              onClick={() => cancelUploadTask(t.id)}
-	                              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+	                              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
 	                              title="取消"
 	                            >
 	                              <CircleX className="w-4 h-4" />
@@ -2466,7 +2856,7 @@ export default function R2Admin() {
 	                          ) : t.status === "error" ? (
 	                            <button
 	                              onClick={() => resumeUploadTask(t.id)}
-	                              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+	                              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
 	                              title="重试"
 	                            >
 	                              <Play className="w-4 h-4" />
@@ -2474,7 +2864,7 @@ export default function R2Admin() {
 	                          ) : null}
 	                        </div>
 	                      </div>
-	                      <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
+	                      <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden dark:bg-gray-800">
 	                        <div
 	                          className={`h-2 ${
 	                            t.status === "error"
@@ -2488,7 +2878,7 @@ export default function R2Admin() {
 	                          style={{ width: `${pct}%` }}
 	                        />
 	                      </div>
-                      {t.status === "error" ? <div className="mt-2 text-[11px] text-red-600">{t.error ?? "上传失败"}</div> : null}
+                      {t.status === "error" ? <div className="mt-2 text-[11px] text-red-600 dark:text-red-300">{t.error ?? "上传失败"}</div> : null}
                     </div>
                   );
                 })}
@@ -2510,20 +2900,20 @@ export default function R2Admin() {
           onClick={() => setPreview(null)}
         >
           <div
-            className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden"
+            className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800"
             onClick={(e) => e.stopPropagation()}
           >
-	            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
+	            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-3 dark:border-gray-800">
 	              <div className="min-w-0">
-	                <div className="text-sm font-semibold text-gray-900 truncate" title={preview.name}>
+	                <div className="text-sm font-semibold text-gray-900 truncate dark:text-gray-100" title={preview.name}>
 	                  {preview.name}
 	                </div>
-	                <div className="text-[11px] text-gray-500 truncate" title={preview.key}>
+	                <div className="text-[11px] text-gray-500 truncate dark:text-gray-400" title={preview.key}>
 	                  {preview.key}
 	                </div>
 	              </div>
 	              <div className="flex items-center gap-2">
-	                <span className="hidden sm:inline-flex text-[10px] px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-600 font-semibold">
+	                <span className="hidden sm:inline-flex text-[10px] px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-600 font-semibold dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
 	                  {getFileExt(preview.name).toUpperCase() || "FILE"}
 	                </span>
 	                <button
@@ -2536,21 +2926,21 @@ export default function R2Admin() {
 	                      setToast("下载失败");
 	                    }
 	                  }}
-	                  className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
+	                  className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
 	                  title="下载"
 	                >
 	                  <Download className="w-4 h-4" />
 	                </button>
 	                <button
 	                  onClick={() => setPreview(null)}
-	                  className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"
+	                  className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
 	                  title="关闭"
 	                >
 	                  <X className="w-4 h-4" />
 	                </button>
 	              </div>
 	            </div>
-	            <div className="p-4 bg-gray-50">
+	            <div className="p-4 bg-gray-50 dark:bg-gray-950/30">
 	              {preview.kind === "image" ? (
 	                <div className="flex items-center justify-center">
 	                  <img src={preview.url} alt={preview.name} className="max-h-[70vh] max-w-full rounded-lg shadow" />
@@ -2564,26 +2954,26 @@ export default function R2Admin() {
 	              ) : preview.kind === "pdf" ? (
 	                <iframe
 	                  src={preview.url}
-	                  className="w-full h-[70vh] rounded-lg shadow bg-white"
+	                  className="w-full h-[70vh] rounded-lg shadow bg-white dark:bg-gray-900"
 	                  title="PDF Preview"
 	                />
 	              ) : preview.kind === "office" ? (
 	                <iframe
 	                  src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(preview.url)}`}
-	                  className="w-full h-[70vh] rounded-lg shadow bg-white"
+	                  className="w-full h-[70vh] rounded-lg shadow bg-white dark:bg-gray-900"
 	                  title="Office Preview"
 	                />
 	              ) : preview.kind === "text" ? (
-	                <pre className="text-xs bg-white border border-gray-200 rounded-lg p-4 overflow-auto max-h-[70vh] whitespace-pre-wrap">
+	                <pre className="text-xs bg-white border border-gray-200 rounded-lg p-4 overflow-auto max-h-[70vh] whitespace-pre-wrap dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100">
 	                  {preview.text ?? "加载中..."}
 	                </pre>
 	              ) : (
-	                <div className="bg-white border border-gray-200 rounded-xl p-10 flex flex-col items-center justify-center text-center">
-	                  <div className="w-28 h-28 rounded-full bg-gray-100 flex items-center justify-center">
+	                <div className="bg-white border border-gray-200 rounded-xl p-10 flex flex-col items-center justify-center text-center dark:bg-gray-900 dark:border-gray-800">
+	                  <div className="w-28 h-28 rounded-full bg-gray-100 flex items-center justify-center dark:bg-gray-800">
 	                    <FileCode className="w-10 h-10 text-blue-600" />
 	                  </div>
-	                  <div className="mt-8 text-2xl font-semibold text-gray-900">无法预览此文件</div>
-	                  <div className="mt-3 text-sm text-gray-500">此文件类型暂不支持在线预览，请下载后查看。</div>
+	                  <div className="mt-8 text-2xl font-semibold text-gray-900 dark:text-gray-100">无法预览此文件</div>
+	                  <div className="mt-3 text-sm text-gray-500 dark:text-gray-400">此文件类型暂不支持在线预览，请下载后查看。</div>
 	                  <button
 	                    onClick={async () => {
 	                      try {

@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     if (!bucketId) return NextResponse.json({ error: "Bucket required" }, { status: 400 });
 
     const { bucket } = getBucketById(bucketId);
-    const listed: any = await bucket.list({ prefix, delimiter: "/" });
+    const listed = await bucket.list({ prefix, delimiter: "/" });
 
     const folders = (listed.delimitedPrefixes ?? []).map((p: string) => ({
       name: p.replace(prefix, "").replace(/\/$/, ""),
@@ -23,11 +23,11 @@ export async function GET(req: NextRequest) {
       type: "folder" as const,
     }));
 
-    const folderKeys = new Set<string>((listed.delimitedPrefixes ?? []) as string[]);
+    const folderKeys = new Set<string>(listed.delimitedPrefixes ?? []);
     const files = (listed.objects ?? [])
       // Hide "folder marker" objects (e.g. `a/` with 0 size) from the file list.
-      .filter((o: any) => !(typeof o?.key === "string" && o.key.endsWith("/") && Number(o.size ?? 0) === 0))
-      .map((o: any) => ({
+      .filter((o) => !(typeof o.key === "string" && o.key.endsWith("/") && Number(o.size ?? 0) === 0))
+      .map((o) => ({
         name: String(o.key).replace(prefix, ""),
         key: o.key,
         size: o.size,
@@ -53,8 +53,8 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ items: [...folders, ...files] });
-  } catch (error: any) {
-    const status = typeof error?.status === "number" ? error.status : 500;
+  } catch (error: unknown) {
+    const status = typeof (error as { status?: unknown })?.status === "number" ? (error as { status: number }).status : 500;
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status });
   }
@@ -74,8 +74,8 @@ export async function DELETE(req: NextRequest) {
     const { bucket } = getBucketById(bucketId);
     await bucket.delete(key);
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    const status = typeof error?.status === "number" ? error.status : 500;
+  } catch (error: unknown) {
+    const status = typeof (error as { status?: unknown })?.status === "number" ? (error as { status: number }).status : 500;
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status });
   }
@@ -97,8 +97,8 @@ export async function POST(req: NextRequest) {
       token ? `&token=${encodeURIComponent(token)}` : ""
     }`;
     return NextResponse.json({ url });
-  } catch (error: any) {
-    const status = typeof error?.status === "number" ? error.status : 500;
+  } catch (error: unknown) {
+    const status = typeof (error as { status?: unknown })?.status === "number" ? (error as { status: number }).status : 500;
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status });
   }
@@ -125,8 +125,8 @@ export async function PUT(req: NextRequest) {
     const headers = new Headers();
     if (result?.etag) headers.set("ETag", result.etag);
     return new Response(null, { status: 200, headers });
-  } catch (error: any) {
-    const status = typeof error?.status === "number" ? error.status : 500;
+  } catch (error: unknown) {
+    const status = typeof (error as { status?: unknown })?.status === "number" ? (error as { status: number }).status : 500;
     const message = error instanceof Error ? error.message : String(error);
     return new Response(JSON.stringify({ error: message }), { status, headers: { "Content-Type": "application/json" } });
   }

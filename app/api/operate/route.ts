@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { assertAdmin, getBucketById } from "@/lib/cf";
+import { assertAdmin, getBucketById, type R2BucketLike } from "@/lib/cf";
 
 export const runtime = "edge";
 
 type Operation = "move" | "copy" | "delete" | "mkdir" | "moveMany" | "copyMany";
 
-const listAllKeysWithPrefix = async (bucket: any, prefix: string) => {
+const listAllKeysWithPrefix = async (bucket: R2BucketLike, prefix: string) => {
   const keys: string[] = [];
   let cursor: string | undefined = undefined;
 
   for (;;) {
-    const res: any = await bucket.list({ prefix, cursor });
+    const res = await bucket.list({ prefix, cursor });
     for (const o of res.objects ?? []) keys.push(o.key);
     if (!res.truncated) break;
     cursor = res.cursor;
@@ -20,7 +20,7 @@ const listAllKeysWithPrefix = async (bucket: any, prefix: string) => {
   return keys;
 };
 
-const deleteKeys = async (bucket: any, keys: string[]) => {
+const deleteKeys = async (bucket: R2BucketLike, keys: string[]) => {
   const chunkSize = 1000;
   for (let i = 0; i < keys.length; i += chunkSize) {
     const chunk = keys.slice(i, i + chunkSize);
@@ -28,7 +28,7 @@ const deleteKeys = async (bucket: any, keys: string[]) => {
   }
 };
 
-const copyObject = async (bucket: any, fromKey: string, toKey: string) => {
+const copyObject = async (bucket: R2BucketLike, fromKey: string, toKey: string) => {
   const obj = await bucket.get(fromKey);
   if (!obj) throw new Error("Source not found");
   await bucket.put(toKey, obj.body, { httpMetadata: obj.httpMetadata, customMetadata: obj.customMetadata });
@@ -131,8 +131,8 @@ export async function POST(req: NextRequest) {
     if (op === "move") await deleteKeys(bucket, toCopy);
 
     return NextResponse.json({ success: true, count: toCopy.length });
-  } catch (error: any) {
-    const status = typeof error?.status === "number" ? error.status : 500;
+  } catch (error: unknown) {
+    const status = typeof (error as { status?: unknown })?.status === "number" ? (error as { status: number }).status : 500;
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status });
   }
