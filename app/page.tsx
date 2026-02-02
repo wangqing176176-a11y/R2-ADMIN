@@ -1681,25 +1681,28 @@ export default function R2Admin() {
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() =>
-              setThemeMode((prev) =>
-                prev === "system" ? (resolvedDark ? "light" : "dark") : prev === "dark" ? "light" : "system",
-              )
-            }
-            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-            title={themeMode === "system" ? "主题：跟随系统" : themeMode === "dark" ? "主题：深色" : "主题：浅色"}
-            aria-label="切换主题"
-          >
-            {themeMode === "dark" ? (
-              <Moon className="w-4 h-4" />
-            ) : themeMode === "light" ? (
-              <Sun className="w-4 h-4" />
-            ) : (
-              <Monitor className="w-4 h-4" />
-            )}
-          </button>
+          {/* 移动端抽屉里不显示主题切换（主页工具栏已提供） */}
+          {!onClose ? (
+            <button
+              type="button"
+              onClick={() =>
+                setThemeMode((prev) =>
+                  prev === "system" ? (resolvedDark ? "light" : "dark") : prev === "dark" ? "light" : "system",
+                )
+              }
+              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+              title={themeMode === "system" ? "主题：跟随系统" : themeMode === "dark" ? "主题：深色" : "主题：浅色"}
+              aria-label="切换主题"
+            >
+              {themeMode === "dark" ? (
+                <Moon className="w-4 h-4" />
+              ) : themeMode === "light" ? (
+                <Sun className="w-4 h-4" />
+              ) : (
+                <Monitor className="w-4 h-4" />
+              )}
+            </button>
+          ) : null}
           {onClose ? (
             <button
               type="button"
@@ -1724,62 +1727,86 @@ export default function R2Admin() {
                   void fetchBuckets();
                   setToast("已刷新桶列表");
                 }}
-                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                className="px-2 py-1 rounded-md text-xs font-bold text-blue-600 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/30"
                 title="刷新桶列表"
                 aria-label="刷新桶列表"
               >
-                <RefreshCw className="w-4 h-4" />
+                刷新
               </button>
             </div>
 
-            <div ref={bucketMenuRef} className="relative mt-2">
-              <button
-                type="button"
-                onClick={() => setBucketMenuOpen((v) => !v)}
-                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100 flex items-center justify-between gap-3"
-                aria-haspopup="listbox"
-                aria-expanded={bucketMenuOpen}
-              >
-                <span className="truncate">
-                  {selectedBucket ? buckets.find((b) => b.id === selectedBucket)?.Name ?? selectedBucket : "选择存储桶"}
-                </span>
-                <ChevronDown
-                  className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform ${
-                    bucketMenuOpen ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
+            {isMobile ? (
+              <div className="mt-2">
+                <select
+                  value={selectedBucket ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (!v) return;
+                    selectBucket(v);
+                  }}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100"
+                  aria-label="选择存储桶"
+                >
+                  <option value="" disabled>
+                    选择存储桶
+                  </option>
+                  {buckets.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.Name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div ref={bucketMenuRef} className="relative mt-2">
+                <button
+                  type="button"
+                  onClick={() => setBucketMenuOpen((v) => !v)}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100 flex items-center justify-between gap-3"
+                  aria-haspopup="listbox"
+                  aria-expanded={bucketMenuOpen}
+                >
+                  <span className="truncate">
+                    {selectedBucket ? buckets.find((b) => b.id === selectedBucket)?.Name ?? selectedBucket : "选择存储桶"}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform ${
+                      bucketMenuOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
 
-              {bucketMenuOpen ? (
-                <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden dark:border-gray-800 dark:bg-gray-900">
-                  <div className="max-h-[40vh] overflow-auto p-2">
-                    {buckets.length ? (
-                      buckets.map((bucket) => (
-                        <button
-                          key={bucket.id}
-                          type="button"
-                          onClick={() => selectBucket(bucket.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors ${
-                            selectedBucket === bucket.id
-                              ? "bg-blue-50 text-blue-700 font-medium dark:bg-blue-950/40 dark:text-blue-200"
-                              : "text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
-                          }`}
-                        >
-                          <div
-                            className={`w-2 h-2 rounded-full ${
-                              selectedBucket === bucket.id ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-700"
+                {bucketMenuOpen ? (
+                  <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden dark:border-gray-800 dark:bg-gray-900">
+                    <div className="max-h-[40vh] overflow-auto p-2">
+                      {buckets.length ? (
+                        buckets.map((bucket) => (
+                          <button
+                            key={bucket.id}
+                            type="button"
+                            onClick={() => selectBucket(bucket.id)}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors ${
+                              selectedBucket === bucket.id
+                                ? "bg-blue-50 text-blue-700 font-medium dark:bg-blue-950/40 dark:text-blue-200"
+                                : "text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
                             }`}
-                          ></div>
-                          <span className="truncate">{bucket.Name}</span>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">暂无桶</div>
-                    )}
+                          >
+                            <div
+                              className={`w-2 h-2 rounded-full ${
+                                selectedBucket === bucket.id ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-700"
+                              }`}
+                            ></div>
+                            <span className="truncate">{bucket.Name}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">暂无桶</div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ) : null}
-            </div>
+                ) : null}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1892,8 +1919,8 @@ export default function R2Admin() {
     </div>
   );
 
-  const DetailsPanel = ({ onClose }: { onClose?: () => void }) => (
-    <div className="h-full bg-white border-l border-gray-200 flex flex-col shadow-sm dark:bg-gray-900 dark:border-gray-800">
+  const DetailsPanel = ({ onClose, compact }: { onClose?: () => void; compact?: boolean }) => (
+    <div className="h-full w-full bg-white border-l border-gray-200 flex flex-col shadow-sm dark:bg-gray-900 dark:border-gray-800">
       <div className="h-16 px-5 border-b border-gray-100 flex items-center justify-between gap-3 dark:border-gray-800">
         <h2 className="font-bold text-gray-800 text-sm uppercase tracking-wide dark:text-gray-100">详细信息</h2>
         {onClose ? (
@@ -1908,43 +1935,66 @@ export default function R2Admin() {
         ) : null}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-8">
+      <div className={`flex-1 overflow-y-auto ${compact ? "p-4 space-y-5" : "p-6 space-y-8"}`}>
         {selectedItem ? (
-          <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-            <div className="flex flex-col items-center">
-              <div className="w-24 h-24 bg-gray-50 rounded-2xl border border-gray-100 flex items-center justify-center mb-4 shadow-sm dark:bg-gray-950 dark:border-gray-800">
+          <div className={`${compact ? "space-y-4" : "space-y-6"} animate-in fade-in slide-in-from-right-4 duration-300`}>
+            <div className={compact ? "flex items-center gap-3" : "flex flex-col items-center"}>
+              <div
+                className={`${
+                  compact ? "w-14 h-14 rounded-xl" : "w-24 h-24 rounded-2xl"
+                } bg-gray-50 border border-gray-100 flex items-center justify-center ${
+                  compact ? "" : "mb-4"
+                } shadow-sm dark:bg-gray-950 dark:border-gray-800`}
+              >
                 {getIcon(selectedItem.type, selectedItem.name)}
               </div>
-              <h3 className="font-semibold text-gray-900 text-center break-all px-2 leading-snug dark:text-gray-100">{selectedItem.name}</h3>
-              <div className="mt-2 inline-flex items-center gap-2">
-                <span className="text-[10px] px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-600 font-semibold dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
-                  {getFileTag(selectedItem)}
-                </span>
-                {selectedItem.type === "file" ? (
-                  <span className="text-[10px] text-gray-400 font-medium dark:text-gray-400">{formatSize(selectedItem.size)}</span>
-                ) : null}
+              <div className={compact ? "min-w-0 flex-1" : ""}>
+                <h3
+                  className={`font-semibold text-gray-900 ${
+                    compact ? "text-left break-words" : "text-center break-all px-2"
+                  } leading-snug dark:text-gray-100`}
+                >
+                  {selectedItem.name}
+                </h3>
+                {compact ? (
+                  <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {selectedItem.type === "folder" ? "文件夹" : formatSize(selectedItem.size)}
+                    {selectedItem.lastModified ? ` · ${new Date(selectedItem.lastModified).toLocaleDateString()}` : ""}
+                  </div>
+                ) : (
+                  <div className="mt-2 inline-flex items-center gap-2">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-600 font-semibold dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                      {getFileTag(selectedItem)}
+                    </span>
+                    {selectedItem.type === "file" ? (
+                      <span className="text-[10px] text-gray-400 font-medium dark:text-gray-400">{formatSize(selectedItem.size)}</span>
+                    ) : null}
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="space-y-0 text-sm border rounded-lg border-gray-100 overflow-hidden dark:border-gray-800">
-              <div className="flex justify-between p-3 bg-gray-50/50 border-b border-gray-100 dark:bg-gray-950/30 dark:border-gray-800">
-                <span className="text-gray-500 dark:text-gray-400">类型</span>
-                <span className="text-gray-900 font-medium dark:text-gray-100">{selectedItem.type === "folder" ? "文件夹" : "文件"}</span>
+            {!compact ? (
+              <div className="space-y-0 text-sm border rounded-lg border-gray-100 overflow-hidden dark:border-gray-800">
+                <div className="flex justify-between p-3 bg-gray-50/50 border-b border-gray-100 dark:bg-gray-950/30 dark:border-gray-800">
+                  <span className="text-gray-500 dark:text-gray-400">类型</span>
+                  <span className="text-gray-900 font-medium dark:text-gray-100">{selectedItem.type === "folder" ? "文件夹" : "文件"}</span>
+                </div>
+                <div className="flex justify-between p-3 bg-white border-b border-gray-100 dark:bg-gray-900 dark:border-gray-800">
+                  <span className="text-gray-500 dark:text-gray-400">大小</span>
+                  <span className="text-gray-900 font-medium dark:text-gray-100">{formatSize(selectedItem.size)}</span>
+                </div>
+                <div className="flex justify-between p-3 bg-gray-50/50 dark:bg-gray-950/30">
+                  <span className="text-gray-500 dark:text-gray-400">修改时间</span>
+                  <span className="text-gray-900 font-medium text-right text-xs dark:text-gray-100">
+                    {selectedItem.lastModified ? new Date(selectedItem.lastModified).toLocaleDateString() : "-"}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between p-3 bg-white border-b border-gray-100 dark:bg-gray-900 dark:border-gray-800">
-                <span className="text-gray-500 dark:text-gray-400">大小</span>
-                <span className="text-gray-900 font-medium dark:text-gray-100">{formatSize(selectedItem.size)}</span>
-              </div>
-              <div className="flex justify-between p-3 bg-gray-50/50 dark:bg-gray-950/30">
-                <span className="text-gray-500 dark:text-gray-400">修改时间</span>
-                <span className="text-gray-900 font-medium text-right text-xs dark:text-gray-100">
-                  {selectedItem.lastModified ? new Date(selectedItem.lastModified).toLocaleDateString() : "-"}
-                </span>
-              </div>
-            </div>
+            ) : null}
 
             {selectedItem.type === "folder" ? (
-              <div className="grid grid-cols-2 gap-3 pt-2">
+              <div className={`grid grid-cols-2 ${compact ? "gap-2 pt-1" : "gap-3 pt-2"}`}>
                 <button
                   onClick={() => handleEnterFolder(selectedItem!.name)}
                   className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors col-span-2"
@@ -2055,27 +2105,29 @@ export default function R2Admin() {
           </div>
         )}
 
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100 dark:from-blue-950/35 dark:to-indigo-950/25 dark:border-blue-900">
-          <h3 className="text-[10px] font-bold text-blue-800 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
-            当前视图统计
-          </h3>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-gray-500 dark:text-gray-400">文件数</span>
-              <span className="text-sm font-bold text-gray-800 dark:text-gray-100">{currentViewStats.fileCount}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-gray-500 dark:text-gray-400">文件夹数</span>
-              <span className="text-sm font-bold text-gray-800 dark:text-gray-100">{currentViewStats.folderCount}</span>
-            </div>
-            <div className="h-px bg-blue-200/50 my-2 dark:bg-blue-900/50"></div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-gray-500 dark:text-gray-400">总大小</span>
-              <span className="text-sm font-bold text-blue-700 dark:text-blue-200">{formatSize(currentViewStats.totalSize)}</span>
+        {!compact ? (
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100 dark:from-blue-950/35 dark:to-indigo-950/25 dark:border-blue-900">
+            <h3 className="text-[10px] font-bold text-blue-800 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+              当前视图统计
+            </h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500 dark:text-gray-400">文件数</span>
+                <span className="text-sm font-bold text-gray-800 dark:text-gray-100">{currentViewStats.fileCount}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500 dark:text-gray-400">文件夹数</span>
+                <span className="text-sm font-bold text-gray-800 dark:text-gray-100">{currentViewStats.folderCount}</span>
+              </div>
+              <div className="h-px bg-blue-200/50 my-2 dark:bg-blue-900/50"></div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500 dark:text-gray-400">总大小</span>
+                <span className="text-sm font-bold text-blue-700 dark:text-blue-200">{formatSize(currentViewStats.totalSize)}</span>
+              </div>
             </div>
           </div>
-        </div>
+        ) : null}
       </div>
 
       <div className="p-4 border-t border-gray-100 bg-gray-50 text-[10px] text-gray-400 text-center dark:border-gray-800 dark:bg-gray-950/30 dark:text-gray-400">
@@ -2114,49 +2166,8 @@ export default function R2Admin() {
         {/* 顶部工具栏 */}
         <div className="border-b border-gray-200 bg-white shrink-0 dark:border-gray-800 dark:bg-gray-900">
           {/* 桌面端：保持原布局 */}
-          <div className="hidden md:flex h-16 border-b-0 items-center justify-between px-6">
-            <div className="flex items-center gap-1 text-sm text-gray-600 overflow-hidden mr-4 dark:text-gray-300">
-              <button
-                onClick={() => {
-                  setPath([]);
-                  setSearchTerm("");
-                }}
-                className="hover:bg-gray-100 p-1.5 rounded-md transition-colors text-gray-500 flex items-center gap-1 dark:text-gray-300 dark:hover:bg-gray-800"
-              >
-                <Home className="w-4 h-4" />
-                <span className="hidden sm:inline text-xs font-medium text-gray-600 dark:text-gray-300">根目录</span>
-              </button>
-              {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
-              {path.map((folder, idx) => (
-                <React.Fragment key={idx}>
-                  <button
-                    onClick={() => handleBreadcrumbClick(idx)}
-                    className="hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors font-medium truncate max-w-[120px] dark:hover:text-blue-200 dark:hover:bg-blue-950/30"
-                  >
-                    {folder}
-                  </button>
-                  {idx < path.length - 1 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
-                </React.Fragment>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="relative hidden md:block">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-                <input
-                  type="text"
-                  placeholder="桶内全局搜索..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 pr-4 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 w-48 transition-all dark:bg-gray-950 dark:border-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
-                />
-                {searchLoading ? (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <RefreshCw className="w-4 h-4 text-gray-400 animate-spin dark:text-gray-500" />
-                  </div>
-                ) : null}
-              </div>
-              <div className="h-6 w-px bg-gray-200 mx-1 dark:bg-gray-800"></div>
+          <div className="hidden md:flex h-16 border-b-0 items-center px-6">
+            <div className="ml-auto flex items-center gap-3">
               <button
                 onClick={() => selectedBucket && fetchFiles(selectedBucket, path)}
                 disabled={!selectedBucket}
@@ -2237,6 +2248,22 @@ export default function R2Admin() {
                 )}
                 <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">主题</span>
               </button>
+              <div className="h-6 w-px bg-gray-200 mx-1 dark:bg-gray-800"></div>
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+                <input
+                  type="text"
+                  placeholder="桶内全局搜索..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 pr-9 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 w-60 transition-all dark:bg-gray-950 dark:border-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
+                />
+                {searchLoading ? (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <RefreshCw className="w-4 h-4 text-gray-400 animate-spin dark:text-gray-500" />
+                  </div>
+                ) : null}
+              </div>
               <button
                 onClick={() => {
                   if (!selectedBucket) return;
@@ -2258,6 +2285,34 @@ export default function R2Admin() {
                   </>
                 )}
               </button>
+            </div>
+          </div>
+
+          {/* 桌面端：面包屑单独一行显示，避免被按钮挤压 */}
+          <div className="hidden md:flex items-start gap-1 px-6 py-2 border-t border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900">
+            <div className="flex flex-wrap items-center gap-1 text-sm text-gray-600 dark:text-gray-300">
+              <button
+                onClick={() => {
+                  setPath([]);
+                  setSearchTerm("");
+                }}
+                className="hover:bg-gray-100 px-2 py-1 rounded-md transition-colors text-gray-500 flex items-center gap-1 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                <Home className="w-4 h-4" />
+                <span className="text-xs font-medium text-gray-600 dark:text-gray-300">根目录</span>
+              </button>
+              {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
+              {path.map((folder, idx) => (
+                <React.Fragment key={idx}>
+                  <button
+                    onClick={() => handleBreadcrumbClick(idx)}
+                    className="hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors font-medium break-words dark:hover:text-blue-200 dark:hover:bg-blue-950/30"
+                  >
+                    {folder}
+                  </button>
+                  {idx < path.length - 1 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
+                </React.Fragment>
+              ))}
             </div>
           </div>
 
@@ -2706,7 +2761,7 @@ export default function R2Admin() {
           onClick={(e) => e.stopPropagation()}
         >
           <div className="h-[85dvh] bg-white rounded-t-2xl shadow-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">
-            <DetailsPanel onClose={() => setMobileDetailOpen(false)} />
+            <DetailsPanel compact onClose={() => setMobileDetailOpen(false)} />
           </div>
         </div>
       </div>
