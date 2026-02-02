@@ -2184,7 +2184,7 @@ export default function R2Admin() {
       </div>
 
       {/* 中间：文件浏览器 */}
-      <main className="flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-900/50">
+      <main className="flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-900/50 ml-[-1px]">
         {/* 顶部工具栏 */}
         <div className="border-b border-gray-200 bg-white shrink-0 dark:border-gray-800 dark:bg-gray-900">
           {/* 桌面端：保持原布局 */}
