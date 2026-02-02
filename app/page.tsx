@@ -300,19 +300,19 @@ export default function R2Admin() {
   }, [toastPayload]);
 
   const ToastView = toastPayload ? (
-    <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 w-[min(92vw,420px)]">
+    <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 max-w-[92vw]">
       <div
-        className={`flex items-start gap-3 px-4 py-3 rounded-2xl border shadow-lg ${
+        className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border shadow-lg text-sm font-medium ${
           toastPayload.kind === "success"
-            ? "bg-green-50 border-green-200 text-green-900 dark:bg-green-950/40 dark:border-green-900 dark:text-green-100"
+            ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-950/40 dark:border-green-900 dark:text-green-200"
             : toastPayload.kind === "error"
-              ? "bg-red-50 border-red-200 text-red-900 dark:bg-red-950/40 dark:border-red-900 dark:text-red-100"
-              : "bg-gray-50 border-gray-200 text-gray-900 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100"
+              ? "bg-red-50 border-red-200 text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-200"
+              : "bg-gray-900 text-white border-gray-900 dark:bg-gray-900 dark:border-gray-800"
         }`}
         role="status"
         aria-live="polite"
       >
-        <div className="mt-0.5 shrink-0">
+        <span className="shrink-0 flex items-center justify-center">
           {toastPayload.kind === "success" ? (
             <ShieldCheck className="w-5 h-5" />
           ) : toastPayload.kind === "error" ? (
@@ -320,13 +320,8 @@ export default function R2Admin() {
           ) : (
             <BadgeInfo className="w-5 h-5" />
           )}
-        </div>
-        <div className="min-w-0">
-          <div className="text-sm font-semibold leading-snug">{toastPayload.message}</div>
-          {toastPayload.detail ? (
-            <div className="mt-0.5 text-[12px] opacity-80 leading-snug">{toastPayload.detail}</div>
-          ) : null}
-        </div>
+        </span>
+        <span className="leading-none">{toastPayload.message}</span>
       </div>
     </div>
   ) : null;
@@ -2194,7 +2189,7 @@ export default function R2Admin() {
         <div className="border-b border-gray-200 bg-white shrink-0 dark:border-gray-800 dark:bg-gray-900">
           {/* 桌面端：保持原布局 */}
           <div className="hidden md:flex h-16 border-b-0 items-center px-6 gap-6">
-            <div className="flex-1 flex items-center justify-between">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => selectedBucket && fetchFiles(selectedBucket, path)}
                 disabled={!selectedBucket}
@@ -2276,6 +2271,8 @@ export default function R2Admin() {
                 <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">主题</span>
               </button>
             </div>
+
+            <div className="flex-1" />
 
             <div className="flex items-center gap-3">
               <div className="relative">
