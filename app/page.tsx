@@ -1636,17 +1636,17 @@ export default function R2Admin() {
 
           {/* 右侧：登录模块 */}
 	          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col order-1 lg:order-2 dark:border-gray-800 dark:bg-gray-900">
-	            <div className="px-6 py-4 sm:px-8 sm:py-7 sm:h-[168px] bg-blue-600 text-white flex items-center shrink-0">
-	              <div className="flex items-center gap-4 w-full">
-	                <div className="h-12 w-12 flex items-center justify-center shrink-0">
-	                  <BrandMark className="w-12 h-12" />
-	                </div>
-	                <div>
-	                  <div className="text-2xl font-semibold leading-tight">{LOGIN_PAGE.title}</div>
-	                  <div className="mt-1 text-[13px] text-white/80">{LOGIN_PAGE.subtitle}</div>
-                </div>
-              </div>
-            </div>
+		            <div className="px-6 py-4 sm:px-8 sm:py-7 sm:h-[168px] bg-blue-600 text-white flex items-center shrink-0">
+		              <div className="flex items-center gap-4 w-full">
+		                <div className="h-16 w-16 flex items-center justify-center shrink-0">
+		                  <BrandMark className="w-16 h-16" />
+		                </div>
+		                <div>
+		                  <div className="text-2xl font-semibold leading-tight">{LOGIN_PAGE.title}</div>
+			                  <div className="mt-1 text-[17px] text-white/80">{LOGIN_PAGE.subtitle}</div>
+		                </div>
+		              </div>
+		            </div>
 
 	            <div className="px-8 py-10 flex flex-col gap-8 grow">
 		              <div className="text-center">
@@ -2585,8 +2585,8 @@ export default function R2Admin() {
                       <li>进入 Cloudflare Pages 项目</li>
                       <li>点击「设置」→「绑定」</li>
                       <li>点击「添加」中选择「R2 存储桶」</li>
-                      <li>填写绑定名称（R2_）并选择你的桶</li>
-                      <li>保存后重新部署，等待部署成功刷新即可。</li>
+                      <li>填写绑定名称,并选择你的桶</li>
+                      <li>保存后重新部署，部署成功刷新即可。</li>
                     </ol>
                   </div>
 
