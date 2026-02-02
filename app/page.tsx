@@ -1430,7 +1430,7 @@ export default function R2Admin() {
 
           {/* 右侧：登录模块 */}
           <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col">
-            <div className="px-8 py-7 h-[168px] bg-blue-600 text-white flex items-center">
+            <div className="px-8 py-7 h-[168px] bg-blue-600 text-white flex items-center shrink-0">
               <div className="flex items-center gap-4 w-full">
                 <div className="h-12 w-12 rounded-2xl bg-white/15 flex items-center justify-center">
                   <HardDrive className="w-6 h-6" />
@@ -1442,67 +1442,69 @@ export default function R2Admin() {
               </div>
             </div>
 
-            <div className="px-8 pt-6 pb-2">
-              <div className="text-center text-3xl font-bold tracking-tight text-blue-600">管理员登录</div>
-            </div>
-
-            <form onSubmit={handleLogin} className="px-8 pb-8 pt-4 space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">管理账号</label>
-                <input
-                  type="text"
-                  value={formUsername}
-                  onChange={(e) => setFormUsername(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                  placeholder="请输入账号"
-                />
+            <div className="px-8 py-8 flex flex-col grow justify-center">
+              <div className="text-center">
+                <h2 className="text-3xl font-bold tracking-tight text-blue-600">管理员登录</h2>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">管理密码</label>
-                <div className="relative">
+              <form onSubmit={handleLogin} className="mt-8 space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">管理账号</label>
                   <input
-                    type={showSecret ? "text" : "password"}
-                    value={formPassword}
-                    onChange={(e) => setFormPassword(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all pr-10"
-                    placeholder="请输入密码"
+                    type="text"
+                    value={formUsername}
+                    onChange={(e) => setFormUsername(e.target.value)}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                    placeholder="请输入账号"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowSecret(!showSecret)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
                 </div>
-              </div>
 
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="remember"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <label htmlFor="remember" className="ml-2 text-sm text-gray-600">
-                  记住登陆状态
-                </label>
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">管理密码</label>
+                  <div className="relative">
+                    <input
+                      type={showSecret ? "text" : "password"}
+                      value={formPassword}
+                      onChange={(e) => setFormPassword(e.target.value)}
+                      className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all pr-10"
+                      placeholder="请输入密码"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSecret(!showSecret)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showSecret ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
 
-              <button
-                type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2"
-              >
-                <ShieldCheck className="w-4 h-4" />
-                进入管理
-              </button>
-              <div className="text-xs text-gray-500 text-center pt-2">
-                本站使用 Cloudflare Pages 绑定的 R2 存储桶进行管理；
-                管理员设置了 ADMIN_PASSWORD，将要求输入管理账号和管理密码以验证。
-              </div>
-            </form>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="remember"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="remember" className="ml-2 block text-sm text-gray-600">
+                    记住登陆状态
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  className="!mt-10 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors shadow-blue-500/20 shadow-lg flex items-center justify-center gap-2"
+                >
+                  <ShieldCheck className="w-5 h-5" />
+                  进入管理
+                </button>
+                <div className="text-xs text-gray-500 text-center pt-4">
+                  本站使用 Cloudflare Pages 绑定的 R2 存储桶进行管理；
+                  管理员设置了 ADMIN_PASSWORD，将要求输入管理账号和管理密码以验证。
+                </div>
+              </form>
+            </div>
           </section>
         </div>
 
