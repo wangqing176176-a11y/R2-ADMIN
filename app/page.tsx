@@ -929,7 +929,7 @@ export default function R2Admin() {
     if (!selectedBucket) return;
     const keys = Array.from(selectedKeys).filter((k) => !k.endsWith("/"));
     if (!keys.length) {
-      setToast("请先勾选要移动的文件");
+      setToast("暂不支持文件夹整体移动");
       return;
     }
     setMoveMode("move");
@@ -1044,7 +1044,7 @@ export default function R2Admin() {
     if (!selectedBucket) return;
     const keys = Array.from(selectedKeys).filter((k) => !k.endsWith("/"));
     if (!keys.length) {
-      setToast("请先勾选要下载的文件（文件夹暂不支持批量下载）");
+      setToast("暂不支持文件夹整体批量下载");
       return;
     }
     setToast(`开始下载 ${keys.length} 个文件`);
