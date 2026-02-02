@@ -3,7 +3,7 @@ import { assertAdmin, getBucketById, type R2BucketLike } from "@/lib/cf";
 
 export const runtime = "edge";
 
-type Operation = "move" | "copy" | "delete" | "mkdir" | "moveMany" | "copyMany";
+type Operation = "move" | "copy" | "delete" | "mkdir" | "moveMany" | "copyMany" | "deleteMany";
 
 const listAllKeysWithPrefix = async (bucket: R2BucketLike, prefix: string) => {
   const keys: string[] = [];
@@ -50,7 +50,15 @@ export async function POST(req: NextRequest) {
     if (!bucketId) return NextResponse.json({ error: "Missing params" }, { status: 400 });
 
     const op: Operation = operation ?? "move";
-    if (op !== "move" && op !== "copy" && op !== "delete" && op !== "mkdir" && op !== "moveMany" && op !== "copyMany")
+    if (
+      op !== "move" &&
+      op !== "copy" &&
+      op !== "delete" &&
+      op !== "mkdir" &&
+      op !== "moveMany" &&
+      op !== "copyMany" &&
+      op !== "deleteMany"
+    )
       return NextResponse.json({ error: "Invalid operation" }, { status: 400 });
 
     const { bucket } = getBucketById(bucketId);
@@ -96,6 +104,26 @@ export async function POST(req: NextRequest) {
       }
 
       return NextResponse.json({ success: true, count: moved });
+    }
+
+    if (op === "deleteMany") {
+      const keys = (sourceKeys ?? []).filter((k) => typeof k === "string" && k.length > 0);
+      if (!keys.length) return NextResponse.json({ error: "Missing params" }, { status: 400 });
+
+      const toDelete: string[] = [];
+      for (const k of keys) {
+        const isPrefix = k.endsWith("/");
+        if (!isPrefix) {
+          toDelete.push(k);
+          continue;
+        }
+        const all = await listAllKeysWithPrefix(bucket, k);
+        for (const src of all) toDelete.push(src);
+      }
+
+      const uniq = Array.from(new Set(toDelete));
+      await deleteKeys(bucket, uniq);
+      return NextResponse.json({ success: true, count: uniq.length });
     }
 
     if (!sourceKey) return NextResponse.json({ error: "Missing params" }, { status: 400 });

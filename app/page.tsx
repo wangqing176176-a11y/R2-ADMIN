@@ -287,14 +287,18 @@ export default function R2Admin() {
 
   useEffect(() => {
     if (!bucketMenuOpen) return;
-    const onDown = (e: MouseEvent) => {
+    const onDown = (e: Event) => {
       const target = e.target as Node | null;
       if (!target) return;
       if (bucketMenuRef.current && bucketMenuRef.current.contains(target)) return;
       setBucketMenuOpen(false);
     };
     document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown, { passive: true });
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+    };
   }, [bucketMenuOpen]);
 
   useEffect(() => {
@@ -324,11 +328,7 @@ export default function R2Admin() {
     }
   }, [isMobile]);
 
-  useEffect(() => {
-    if (!isMobile) return;
-    if (selectedItem) setMobileDetailOpen(true);
-    else setMobileDetailOpen(false);
-  }, [isMobile, selectedItem]);
+  // 移动端详情弹窗只由“操作”按钮触发，不跟随选中项自动弹出。
 
   useEffect(() => {
     fetchBuckets();
@@ -697,30 +697,47 @@ export default function R2Admin() {
   };
 
   const handleDelete = () => {
-    if (!selectedBucket || !selectedItem) return;
+    if (!selectedBucket) return;
+    if (selectedKeys.size === 0 && !selectedItem) return;
     setDeleteOpen(true);
   };
 
   const executeDelete = async () => {
-    if (!selectedBucket || !selectedItem) return;
+    if (!selectedBucket) return;
     try {
       setLoading(true);
-      if (selectedItem.type === "folder") {
+      const selected = Array.from(selectedKeys);
+      if (selected.length > 0) {
         const res = await fetchWithAuth("/api/operate", {
           method: "POST",
           body: JSON.stringify({
             bucket: selectedBucket,
-            sourceKey: selectedItem.key,
-            operation: "delete",
+            sourceKeys: selected,
+            operation: "deleteMany",
           }),
         });
         if (!res.ok) throw new Error("delete failed");
+      } else if (selectedItem) {
+        if (selectedItem.type === "folder") {
+          const res = await fetchWithAuth("/api/operate", {
+            method: "POST",
+            body: JSON.stringify({
+              bucket: selectedBucket,
+              sourceKey: selectedItem.key,
+              operation: "delete",
+            }),
+          });
+          if (!res.ok) throw new Error("delete failed");
+        } else {
+          const res = await fetchWithAuth(
+            `/api/files?bucket=${selectedBucket}&key=${encodeURIComponent(selectedItem.key)}`,
+            { method: "DELETE" },
+          );
+          if (!res.ok) throw new Error("delete failed");
+        }
       } else {
-        const res = await fetchWithAuth(
-          `/api/files?bucket=${selectedBucket}&key=${encodeURIComponent(selectedItem.key)}`,
-          { method: "DELETE" },
-        );
-        if (!res.ok) throw new Error("delete failed");
+        setDeleteOpen(false);
+        return;
       }
 
       setDeleteOpen(false);
@@ -739,6 +756,34 @@ export default function R2Admin() {
     if (!selectedBucket || !selectedItem) return;
     setRenameValue(selectedItem.name);
     setRenameOpen(true);
+  };
+
+  const openRenameForSelection = () => {
+    if (!selectedBucket) return;
+    const keys = Array.from(selectedKeys);
+    if (keys.length !== 1) {
+      setToast("请选择 1 个文件/文件夹进行重命名");
+      return;
+    }
+    const item = filteredFiles.find((f) => f.key === keys[0]);
+    if (!item) {
+      setToast("未找到选中文件");
+      return;
+    }
+    openRenameFor(item);
+  };
+
+  const handleRenameFromToolbar = () => {
+    if (!selectedBucket) return;
+    if (selectedKeys.size === 1) {
+      openRenameForSelection();
+      return;
+    }
+    if (selectedItem) {
+      handleRename();
+      return;
+    }
+    setToast("请选择 1 个文件/文件夹进行重命名");
   };
 
   const openRenameFor = (item: FileItem) => {
@@ -1618,11 +1663,14 @@ export default function R2Admin() {
     setSelectedItem(null);
     setSelectedKeys(new Set());
     setBucketMenuOpen(false);
+    if (isMobile) setMobileNavOpen(false);
+    const name = buckets.find((b) => b.id === bucketId)?.Name ?? bucketId;
+    setToast(`已切换到：${name}`);
   };
 
   const SidebarPanel = ({ onClose }: { onClose?: () => void }) => (
     <div className="h-full bg-white border-r border-gray-200 flex flex-col shadow-sm dark:bg-gray-900 dark:border-gray-800">
-      <div className="p-5 border-b border-gray-100 flex items-center justify-between gap-3 dark:border-gray-800">
+      <div className="h-16 px-5 border-b border-gray-100 flex items-center justify-between gap-3 dark:border-gray-800">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-blue-200 shadow-lg dark:shadow-blue-950/40 shrink-0">
             <HardDrive className="w-5 h-5" />
@@ -1665,72 +1713,79 @@ export default function R2Admin() {
         </div>
       </div>
 
-      <div className="p-3 space-y-3">
-        <div className="px-1">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-xs font-bold text-gray-400 uppercase px-2 mt-2 tracking-wider dark:text-gray-400">存储桶</div>
-            <button
-              type="button"
-              onClick={() => {
-                void fetchBuckets();
-                setToast("已刷新桶列表");
-              }}
-              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-              title="刷新桶列表"
-              aria-label="刷新桶列表"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
-          </div>
+      <div className="flex-1 flex flex-col overflow-y-auto">
+        <div className="p-3 space-y-3 shrink-0">
+          <div className="px-1">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-bold text-gray-400 uppercase px-2 mt-2 tracking-wider dark:text-gray-400">存储桶</div>
+              <button
+                type="button"
+                onClick={() => {
+                  void fetchBuckets();
+                  setToast("已刷新桶列表");
+                }}
+                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                title="刷新桶列表"
+                aria-label="刷新桶列表"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            </div>
 
-          <div ref={bucketMenuRef} className="relative mt-2">
-            <button
-              type="button"
-              onClick={() => setBucketMenuOpen((v) => !v)}
-              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100 flex items-center justify-between gap-3"
-              aria-haspopup="listbox"
-              aria-expanded={bucketMenuOpen}
-            >
-              <span className="truncate">
-                {selectedBucket ? buckets.find((b) => b.id === selectedBucket)?.Name ?? selectedBucket : "选择存储桶"}
-              </span>
-              <ChevronDown className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform ${bucketMenuOpen ? "rotate-180" : ""}`} />
-            </button>
+            <div ref={bucketMenuRef} className="relative mt-2">
+              <button
+                type="button"
+                onClick={() => setBucketMenuOpen((v) => !v)}
+                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100 flex items-center justify-between gap-3"
+                aria-haspopup="listbox"
+                aria-expanded={bucketMenuOpen}
+              >
+                <span className="truncate">
+                  {selectedBucket ? buckets.find((b) => b.id === selectedBucket)?.Name ?? selectedBucket : "选择存储桶"}
+                </span>
+                <ChevronDown
+                  className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform ${
+                    bucketMenuOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
 
-            {bucketMenuOpen ? (
-              <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden dark:border-gray-800 dark:bg-gray-900">
-                <div className="max-h-[40vh] overflow-auto p-2">
-                  {buckets.length ? (
-                    buckets.map((bucket) => (
-                      <button
-                        key={bucket.id}
-                        type="button"
-                        onClick={() => selectBucket(bucket.id)}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors ${
-                          selectedBucket === bucket.id
-                            ? "bg-blue-50 text-blue-700 font-medium dark:bg-blue-950/40 dark:text-blue-200"
-                            : "text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
-                        }`}
-                      >
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            selectedBucket === bucket.id ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-700"
+              {bucketMenuOpen ? (
+                <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden dark:border-gray-800 dark:bg-gray-900">
+                  <div className="max-h-[40vh] overflow-auto p-2">
+                    {buckets.length ? (
+                      buckets.map((bucket) => (
+                        <button
+                          key={bucket.id}
+                          type="button"
+                          onClick={() => selectBucket(bucket.id)}
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors ${
+                            selectedBucket === bucket.id
+                              ? "bg-blue-50 text-blue-700 font-medium dark:bg-blue-950/40 dark:text-blue-200"
+                              : "text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
                           }`}
-                        ></div>
-                        <span className="truncate">{bucket.Name}</span>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">暂无桶</div>
-                  )}
+                        >
+                          <div
+                            className={`w-2 h-2 rounded-full ${
+                              selectedBucket === bucket.id ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-700"
+                            }`}
+                          ></div>
+                          <span className="truncate">{bucket.Name}</span>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">暂无桶</div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="flex-1 overflow-y-auto p-4 border-t border-gray-100 bg-gray-50/50 space-y-3 dark:border-gray-800 dark:bg-gray-950/30">
+        <div className="flex-1" />
+
+        <div className="p-4 border-t border-gray-100 bg-gray-50/50 space-y-3 dark:border-gray-800 dark:bg-gray-950/30 shrink-0">
         <div
           className={`text-xs px-3 py-2 rounded-md border ${
             connectionStatus === "connected"
@@ -1833,12 +1888,13 @@ export default function R2Admin() {
           退出登录
         </button>
       </div>
+      </div>
     </div>
   );
 
   const DetailsPanel = ({ onClose }: { onClose?: () => void }) => (
     <div className="h-full bg-white border-l border-gray-200 flex flex-col shadow-sm dark:bg-gray-900 dark:border-gray-800">
-      <div className="p-5 border-b border-gray-100 flex items-center justify-between gap-3 dark:border-gray-800">
+      <div className="h-16 px-5 border-b border-gray-100 flex items-center justify-between gap-3 dark:border-gray-800">
         <h2 className="font-bold text-gray-800 text-sm uppercase tracking-wide dark:text-gray-100">详细信息</h2>
         {onClose ? (
           <button
@@ -2104,34 +2160,82 @@ export default function R2Admin() {
               <button
                 onClick={() => selectedBucket && fetchFiles(selectedBucket, path)}
                 disabled={!selectedBucket}
-                className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                className="w-12 h-14 flex flex-col items-center justify-center gap-1 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 dark:text-gray-300 dark:hover:bg-gray-800"
                 title="刷新"
+                aria-label="刷新"
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">刷新</span>
               </button>
               <button
                 onClick={handleBatchDownload}
                 disabled={selectedKeys.size === 0}
-                className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                className="w-12 h-14 flex flex-col items-center justify-center gap-1 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 dark:text-gray-300 dark:hover:bg-gray-800"
                 title="批量下载（所选文件）"
+                aria-label="下载"
               >
                 <Download className="w-4 h-4" />
+                <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">下载</span>
               </button>
               <button
                 onClick={openBatchMove}
                 disabled={selectedKeys.size === 0}
-                className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                className="w-12 h-14 flex flex-col items-center justify-center gap-1 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 dark:text-gray-300 dark:hover:bg-gray-800"
                 title="批量移动（所选文件）"
+                aria-label="移动"
               >
                 <ArrowRightLeft className="w-4 h-4" />
+                <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">移动</span>
+              </button>
+              <button
+                onClick={handleRenameFromToolbar}
+                disabled={selectedKeys.size > 1 || (selectedKeys.size === 0 && !selectedItem)}
+                className="w-12 h-14 flex flex-col items-center justify-center gap-1 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 dark:text-gray-300 dark:hover:bg-gray-800"
+                title="重命名（仅支持单选）"
+                aria-label="重命名"
+              >
+                <Edit2 className="w-4 h-4" />
+                <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">重命名</span>
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={selectedKeys.size === 0 && !selectedItem}
+                className="w-12 h-14 flex flex-col items-center justify-center gap-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 dark:text-red-200 dark:hover:bg-red-950/40"
+                title="删除（所选项）"
+                aria-label="删除"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="text-[10px] leading-none">删除</span>
               </button>
               <button
                 onClick={openMkdir}
                 disabled={!selectedBucket || !!searchTerm.trim()}
-                className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                className="w-12 h-14 flex flex-col items-center justify-center gap-1 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 dark:text-gray-300 dark:hover:bg-gray-800"
                 title={searchTerm.trim() ? "搜索中无法新建文件夹" : "新建文件夹"}
+                aria-label="新建"
               >
                 <FolderPlus className="w-4 h-4" />
+                <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">新建</span>
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setThemeMode((prev) =>
+                    prev === "system" ? (resolvedDark ? "light" : "dark") : prev === "dark" ? "light" : "system",
+                  )
+                }
+                className="w-12 h-14 flex flex-col items-center justify-center gap-1 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors active:scale-95 dark:text-gray-300 dark:hover:bg-gray-800"
+                title={themeMode === "system" ? "主题：跟随系统" : themeMode === "dark" ? "主题：深色" : "主题：浅色"}
+                aria-label="主题"
+              >
+                {themeMode === "dark" ? (
+                  <Moon className="w-4 h-4" />
+                ) : themeMode === "light" ? (
+                  <Sun className="w-4 h-4" />
+                ) : (
+                  <Monitor className="w-4 h-4" />
+                )}
+                <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">主题</span>
               </button>
               <button
                 onClick={() => {
@@ -2158,12 +2262,12 @@ export default function R2Admin() {
           </div>
 
           {/* 移动端：分行布局，避免按钮挤压 */}
-          <div className="md:hidden px-4 py-3 space-y-2">
+          <div className="md:hidden px-3 py-2 space-y-2">
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(true)}
-                className="p-3 -ml-1 rounded-lg text-gray-600 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                className="p-2.5 -ml-1 rounded-lg text-gray-600 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
                 aria-label="打开菜单"
               >
                 <Menu className="w-5 h-5" />
@@ -2228,38 +2332,66 @@ export default function R2Admin() {
               </button>
             </div>
 
-            <div className="flex items-center gap-2 overflow-x-auto -mx-4 px-4 pb-1">
+            <div className="flex items-center gap-2 overflow-x-auto -mx-3 px-3 pb-0.5">
               <button
                 onClick={() => selectedBucket && fetchFiles(selectedBucket, path)}
                 disabled={!selectedBucket}
-                className="p-3 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                className="w-16 h-14 flex flex-col items-center justify-center gap-1 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 dark:text-gray-200 dark:hover:bg-gray-800"
                 title="刷新"
+                aria-label="刷新"
               >
                 <RefreshCw className={`w-5 h-5 ${loading ? "animate-spin" : ""}`} />
+                <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">刷新</span>
               </button>
               <button
                 onClick={handleBatchDownload}
                 disabled={selectedKeys.size === 0}
-                className="p-3 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                className="w-16 h-14 flex flex-col items-center justify-center gap-1 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 dark:text-gray-200 dark:hover:bg-gray-800"
                 title="批量下载（所选文件）"
+                aria-label="下载"
               >
                 <Download className="w-5 h-5" />
+                <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">下载</span>
               </button>
               <button
                 onClick={openBatchMove}
                 disabled={selectedKeys.size === 0}
-                className="p-3 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                className="w-16 h-14 flex flex-col items-center justify-center gap-1 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 dark:text-gray-200 dark:hover:bg-gray-800"
                 title="批量移动（所选文件）"
+                aria-label="移动"
               >
                 <ArrowRightLeft className="w-5 h-5" />
+                <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">移动</span>
+              </button>
+              <button
+                onClick={handleRenameFromToolbar}
+                disabled={selectedKeys.size > 1 || (selectedKeys.size === 0 && !selectedItem)}
+                className="w-16 h-14 flex flex-col items-center justify-center gap-1 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 dark:text-gray-200 dark:hover:bg-gray-800"
+                title="重命名（仅支持单选）"
+                aria-label="重命名"
+              >
+                <Edit2 className="w-5 h-5" />
+                <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">重命名</span>
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={selectedKeys.size === 0 && !selectedItem}
+                className="w-16 h-14 flex flex-col items-center justify-center gap-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 dark:text-red-200 dark:hover:bg-red-950/40"
+                title="删除（所选项）"
+                aria-label="删除"
+              >
+                <Trash2 className="w-5 h-5" />
+                <span className="text-[10px] leading-none">删除</span>
               </button>
               <button
                 onClick={openMkdir}
                 disabled={!selectedBucket || !!searchTerm.trim()}
-                className="p-3 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+                className="w-16 h-14 flex flex-col items-center justify-center gap-1 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 dark:text-gray-200 dark:hover:bg-gray-800"
                 title={searchTerm.trim() ? "搜索中无法新建文件夹" : "新建文件夹"}
+                aria-label="新建"
               >
                 <FolderPlus className="w-5 h-5" />
+                <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">新建</span>
               </button>
               <button
                 type="button"
@@ -2268,9 +2400,9 @@ export default function R2Admin() {
                     prev === "system" ? (resolvedDark ? "light" : "dark") : prev === "dark" ? "light" : "system",
                   )
                 }
-                className="p-3 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors dark:text-gray-300 dark:hover:bg-gray-800"
+                className="w-16 h-14 flex flex-col items-center justify-center gap-1 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors active:scale-95 dark:text-gray-200 dark:hover:bg-gray-800"
                 title={themeMode === "system" ? "主题：跟随系统" : themeMode === "dark" ? "主题：深色" : "主题：浅色"}
-                aria-label="切换主题"
+                aria-label="主题"
               >
                 {themeMode === "dark" ? (
                   <Moon className="w-5 h-5" />
@@ -2279,6 +2411,7 @@ export default function R2Admin() {
                 ) : (
                   <Monitor className="w-5 h-5" />
                 )}
+                <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">主题</span>
               </button>
             </div>
           </div>
@@ -2296,7 +2429,7 @@ export default function R2Admin() {
 
         {/* 文件列表 */}
         <div
-          className={`flex-1 overflow-y-auto p-4 md:p-6 bg-gray-50/30 dark:bg-gray-950/25 ${loading ? "pointer-events-none" : ""}`}
+          className={`flex-1 overflow-y-auto p-3 md:p-6 bg-gray-50/30 dark:bg-gray-950/25 ${loading ? "pointer-events-none" : ""}`}
           onClick={() => {
             setSelectedItem(null);
           }}
@@ -2400,9 +2533,10 @@ export default function R2Admin() {
                       />
                     </div>
                     <div className="flex-1">名称</div>
-                    <div className="w-28 text-right hidden sm:block">大小</div>
+                    <div className="w-28 text-right hidden md:block">大小</div>
                     <div className="w-28 text-right hidden md:block">修改时间</div>
-                    <div className="w-40 text-right hidden sm:block">操作</div>
+                    <div className="w-40 text-right hidden md:block">操作</div>
+                    <div className="w-12 text-right md:hidden">操作</div>
                   </div>
                   <div>
                     {filteredFiles.map((file) => {
@@ -2412,14 +2546,20 @@ export default function R2Admin() {
                           key={file.key}
                           onClick={(e) => {
                             e.stopPropagation();
+                            if (isMobile) {
+                              if (file.type === "folder") handleEnterFolder(file.name);
+                              else previewItem(file);
+                              return;
+                            }
                             setSelectedItem(file);
                           }}
                           onDoubleClick={(e) => {
                             e.stopPropagation();
+                            if (isMobile) return;
                             if (file.type === "folder") handleEnterFolder(file.name);
                             else previewItem(file);
                           }}
-                          className={`group flex items-center px-4 py-3 sm:py-2.5 text-sm border-b border-gray-100 hover:bg-gray-50 cursor-pointer dark:border-gray-800 dark:hover:bg-gray-800 ${
+                          className={`group flex items-center px-4 py-3 md:py-2.5 text-sm border-b border-gray-100 hover:bg-gray-50 cursor-pointer dark:border-gray-800 dark:hover:bg-gray-800 ${
                             selectedItem?.key === file.key ? "bg-blue-50 dark:bg-blue-950/30" : "bg-white dark:bg-gray-900"
                           }`}
                         >
@@ -2446,13 +2586,13 @@ export default function R2Admin() {
                               </span>
                             </div>
                           </div>
-                          <div className="w-28 text-right text-xs text-gray-500 hidden sm:block dark:text-gray-400">
+                          <div className="w-28 text-right text-xs text-gray-500 hidden md:block dark:text-gray-400">
                             {file.type === "folder" ? "-" : formatSize(file.size)}
                           </div>
                           <div className="w-28 text-right text-xs text-gray-500 hidden md:block dark:text-gray-400">
                             {file.lastModified ? new Date(file.lastModified).toLocaleDateString() : "-"}
                           </div>
-                          <div className="w-40 hidden sm:flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="w-40 hidden md:flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             {file.type === "folder" ? (
                               <>
                                 <button
@@ -2520,6 +2660,21 @@ export default function R2Admin() {
                                 </button>
                               </>
                             )}
+                          </div>
+                          <div className="w-12 flex justify-end md:hidden">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedItem(file);
+                                setMobileDetailOpen(true);
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-medium text-gray-700 hover:bg-gray-50 active:scale-95 transition dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
+                              aria-label="操作"
+                              title="操作"
+                            >
+                              操作
+                            </button>
                           </div>
                         </div>
                       );
@@ -2898,7 +3053,13 @@ export default function R2Admin() {
       <Modal
         open={deleteOpen}
         title="确认删除"
-        description={selectedItem ? `将删除：${selectedItem.key}` : undefined}
+        description={
+          selectedKeys.size > 0
+            ? `将删除 ${selectedKeys.size} 项`
+            : selectedItem
+              ? `将删除：${selectedItem.key}`
+              : undefined
+        }
         onClose={() => setDeleteOpen(false)}
         footer={
           <div className="flex justify-end gap-2">
@@ -2918,7 +3079,14 @@ export default function R2Admin() {
         }
       >
         <div className="text-sm text-gray-700 dark:text-gray-200">
-          此操作不可恢复。{selectedItem?.type === "folder" ? "（文件夹会递归删除前缀下的所有对象）" : null}
+          此操作不可恢复。
+          {selectedKeys.size > 0
+            ? Array.from(selectedKeys).some((k) => k.endsWith("/"))
+              ? "（包含文件夹时会递归删除前缀下的所有对象）"
+              : null
+            : selectedItem?.type === "folder"
+              ? "（文件夹会递归删除前缀下的所有对象）"
+              : null}
         </div>
       </Modal>
 
