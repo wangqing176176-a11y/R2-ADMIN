@@ -2188,7 +2188,7 @@ export default function R2Admin() {
         {/* 顶部工具栏 */}
         <div className="border-b border-gray-200 bg-white shrink-0 dark:border-gray-800 dark:bg-gray-900">
           {/* 桌面端：保持原布局 */}
-          <div className="hidden md:flex h-16 border-b-0 items-center px-6 gap-6">
+          <div className="hidden md:flex h-16 border-b-0 items-center px-4 gap-6">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => selectedBucket && fetchFiles(selectedBucket, path)}
@@ -2315,7 +2315,7 @@ export default function R2Admin() {
           </div>
 
           {/* 桌面端：面包屑单独一行显示，避免被按钮挤压 */}
-          <div className="hidden md:flex items-start gap-1 px-6 py-2 border-t border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <div className="hidden md:flex items-start gap-1 px-4 py-2 border-t border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900">
             <div className="flex flex-wrap items-center gap-1 text-sm text-gray-600 dark:text-gray-300">
               <button
                 onClick={() => {
@@ -2324,8 +2324,8 @@ export default function R2Admin() {
                 }}
                 className="hover:bg-gray-100 px-2 py-1 rounded-md transition-colors text-gray-500 flex items-center gap-1 dark:text-gray-300 dark:hover:bg-gray-800"
               >
-                <Home className="w-4 h-4" />
-                <span className="text-xs font-medium text-gray-600 dark:text-gray-300">根目录</span>
+                <Home className="w-5 h-5" />
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">根目录</span>
               </button>
               {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
               {path.map((folder, idx) => (
@@ -2353,32 +2353,13 @@ export default function R2Admin() {
               >
                 <Menu className="w-5 h-5" />
               </button>
-              <div className="flex-1 overflow-x-auto">
-                <div className="flex items-center gap-1 min-w-max text-sm text-gray-600 dark:text-gray-300">
-                  <button
-                    onClick={() => {
-                      setPath([]);
-                      setSearchTerm("");
-                    }}
-                    className="hover:bg-gray-100 p-2 rounded-md transition-colors text-gray-500 flex items-center gap-1 dark:text-gray-300 dark:hover:bg-gray-800"
-                  >
-                    <Home className="w-4 h-4" />
-                    <span className="text-xs font-medium">根目录</span>
-                  </button>
-                  {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
-                  {path.map((folder, idx) => (
-                    <React.Fragment key={idx}>
-                      <button
-                        onClick={() => handleBreadcrumbClick(idx)}
-                        className="hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors font-medium whitespace-nowrap dark:hover:text-blue-200 dark:hover:bg-blue-950/30"
-                      >
-                        {folder}
-                      </button>
-                      {idx < path.length - 1 && (
-                        <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />
-                      )}
-                    </React.Fragment>
-                  ))}
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-blue-200 shadow-lg dark:shadow-blue-950/40 shrink-0">
+                  <HardDrive className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="font-bold text-sm tracking-tight text-gray-800 truncate dark:text-gray-100">Qing&apos;s R2 Admin</div>
+                  <div className="text-[10px] text-gray-400 font-medium dark:text-gray-400">绑定桶模式</div>
                 </div>
               </div>
             </div>
@@ -2495,6 +2476,36 @@ export default function R2Admin() {
                 <span className="text-[10px] leading-none text-gray-500 dark:text-gray-400">主题</span>
               </button>
             </div>
+
+            {/* 移动端：面包屑移动到功能区下方、文件列表上方 */}
+            <div className="pt-1">
+              <div className="flex flex-wrap items-center gap-1 text-sm text-gray-600 dark:text-gray-300">
+                <button
+                  onClick={() => {
+                    setPath([]);
+                    setSearchTerm("");
+                  }}
+                  className="hover:bg-gray-100 px-2 py-1 rounded-md transition-colors text-gray-500 flex items-center gap-1 dark:text-gray-300 dark:hover:bg-gray-800"
+                >
+                  <Home className="w-5 h-5" />
+                  <span className="text-sm font-medium">根目录</span>
+                </button>
+                {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
+                {path.map((folder, idx) => (
+                  <React.Fragment key={idx}>
+                    <button
+                      onClick={() => handleBreadcrumbClick(idx)}
+                      className="hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors font-medium whitespace-nowrap dark:hover:text-blue-200 dark:hover:bg-blue-950/30"
+                    >
+                      {folder}
+                    </button>
+                    {idx < path.length - 1 && (
+                      <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2510,7 +2521,7 @@ export default function R2Admin() {
 
         {/* 文件列表 */}
         <div
-          className={`flex-1 overflow-y-auto p-3 md:p-6 bg-gray-50/30 dark:bg-gray-950/25 ${loading ? "pointer-events-none" : ""}`}
+          className={`flex-1 overflow-y-auto p-3 md:p-4 bg-gray-50/30 dark:bg-gray-950/25 ${loading ? "pointer-events-none" : ""}`}
           onClick={() => {
             setSelectedItem(null);
           }}
