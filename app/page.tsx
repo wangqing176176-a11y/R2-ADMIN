@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import Modal from "@/components/Modal";
 import { 
-  HardDrive, Folder, Trash2, Upload, RefreshCw, 
+  Folder, Trash2, Upload, RefreshCw, 
   Wifi, ChevronRight, Home, Search,
   Menu, Sun, Moon, Monitor, ChevronDown,
   FileText, Image as ImageIcon, Music, Video, Edit2,
@@ -44,6 +44,26 @@ const useMediaQuery = (query: string) => {
     return () => mql.removeEventListener("change", onChange);
   }, [query]);
   return matches;
+};
+
+const BrandMark = ({ className }: { className?: string }) => {
+  const [failed, setFailed] = useState(false);
+  if (!failed) {
+    return (
+      <img
+        src="/brand.png"
+        alt=""
+        aria-hidden="true"
+        className={["object-contain", className].filter(Boolean).join(" ")}
+        onError={() => setFailed(true)}
+        draggable={false}
+      />
+    );
+  }
+
+  return (
+    <div aria-hidden="true" className={className} />
+  );
 };
 
 // --- 类型定义 ---
@@ -119,7 +139,7 @@ const formatSize = (bytes?: number) => {
 
 const LOGIN_PAGE = {
   title: "Qing's R2 Admin",
-  subtitle: "连接到您的 Cloudflare R2 存储",
+  subtitle: "R2对象存储多功能管理工具",
   advantages: [
     "极速的响应速度和上传下载速度",
     "无服务器部署、不存储用户数据",
@@ -1410,7 +1430,7 @@ export default function R2Admin() {
 
         // Prefer multipart for most files to improve throughput on some networks/regions.
         // Keep small files as single PUT to reduce overhead.
-        const threshold = 8 * 1024 * 1024;
+        const threshold = 70 * 1024 * 1024;
         const uploadFn = next.file.size >= threshold ? uploadMultipartFile : uploadSingleFile;
 
         let lastAt = performance.now();
@@ -1615,15 +1635,15 @@ export default function R2Admin() {
           </section>
 
           {/* 右侧：登录模块 */}
-          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col order-1 lg:order-2">
-            <div className="px-8 py-7 h-[168px] bg-blue-600 text-white flex items-center shrink-0">
-              <div className="flex items-center gap-4 w-full">
-                <div className="h-12 w-12 rounded-2xl bg-white/15 flex items-center justify-center">
-                  <HardDrive className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="text-2xl font-semibold leading-tight">{LOGIN_PAGE.title}</div>
-                  <div className="mt-1 text-sm text-white/80">{LOGIN_PAGE.subtitle}</div>
+	          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col order-1 lg:order-2">
+	            <div className="px-8 py-7 h-[168px] bg-blue-600 text-white flex items-center shrink-0">
+	              <div className="flex items-center gap-4 w-full">
+	                <div className="h-12 w-12 flex items-center justify-center shrink-0">
+	                  <BrandMark className="w-12 h-12" />
+	                </div>
+	                <div>
+	                  <div className="text-2xl font-semibold leading-tight">{LOGIN_PAGE.title}</div>
+                  <div className="mt-1 text-[13px] text-white/80">{LOGIN_PAGE.subtitle}</div>
                 </div>
               </div>
             </div>
@@ -1718,16 +1738,14 @@ export default function R2Admin() {
         onClose ? "shadow-sm" : ""
       }`}
     >
-      <div className="h-16 px-5 border-b border-gray-100 flex items-center justify-between gap-3 dark:border-gray-800">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-blue-200 shadow-lg dark:shadow-blue-950/40 shrink-0">
-            <HardDrive className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="font-bold text-base tracking-tight text-gray-800 truncate dark:text-gray-100">Qing&apos;s R2 Admin</h1>
-            <p className="text-[10px] text-gray-400 font-medium dark:text-gray-400">绑定桶模式</p>
-          </div>
-        </div>
+	      <div className="h-16 px-5 border-b border-gray-100 flex items-center justify-between gap-3 dark:border-gray-800">
+		        <div className="flex items-center gap-3 min-w-0">
+		          <BrandMark className="w-9 h-9 shrink-0" />
+		          <div className="min-w-0">
+		            <h1 className="font-bold text-base tracking-tight text-gray-800 truncate dark:text-gray-100">Qing&apos;s R2 Admin</h1>
+		            <p className="text-[13px] text-gray-400 font-medium truncate dark:text-gray-400">{LOGIN_PAGE.subtitle}</p>
+		          </div>
+		        </div>
         <div className="flex items-center gap-1">
           {onClose ? (
             <button
@@ -2357,15 +2375,17 @@ export default function R2Admin() {
               >
                 <Menu className="w-5 h-5" />
               </button>
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-blue-200 shadow-lg dark:shadow-blue-950/40 shrink-0">
-                  <HardDrive className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="font-bold text-sm tracking-tight text-gray-800 truncate dark:text-gray-100">Qing&apos;s R2 Admin</div>
-                  <div className="text-[10px] text-gray-400 font-medium dark:text-gray-400">绑定桶模式</div>
-                </div>
-              </div>
+		            <div className="flex items-center gap-3 min-w-0">
+		              <BrandMark className="w-9 h-9 shrink-0" />
+		              <div className="min-w-0">
+			                <div className="font-bold text-[16.7px] leading-[1.5] tracking-tight text-blue-600 truncate dark:text-blue-400">
+			                  Qing&apos;s R2 Admin
+			                </div>
+			                <div className="-mt-0.5 text-[12px] leading-[1.1] text-gray-400 font-medium truncate dark:text-gray-400">
+			                  {LOGIN_PAGE.subtitle}
+			                </div>
+			              </div>
+		            </div>
             </div>
 
             <div className="flex items-center gap-2">
