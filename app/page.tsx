@@ -3293,8 +3293,20 @@ export default function R2Admin() {
 	                          <div className="text-right">
 	                            <div className="text-xs font-semibold text-gray-800 dark:text-gray-100">{pct}%</div>
 	                            <div className="text-[11px] text-gray-500 dark:text-gray-400">
-	                              {t.status === "uploading" ? formatSpeed(t.speedBps) : t.status}
-	                            </div>
+                              {t.status === "uploading"
+                                ? formatSpeed(t.speedBps)
+                                : t.status === "done"
+                                  ? "完成"
+                                  : t.status === "queued"
+                                    ? "排队中"
+                                    : t.status === "paused"
+                                      ? "已暂停"
+                                      : t.status === "canceled"
+                                        ? "已取消"
+                                        : t.status === "error"
+                                          ? "失败"
+                                          : t.status}
+                            </div>
 	                          </div>
 	                          {t.status === "uploading" ? (
 	                            <>
