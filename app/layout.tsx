@@ -22,7 +22,7 @@ const themeInitScript = `
     const isDark = mode === "dark" || (mode === "system" && prefersDark);
     document.documentElement.classList.toggle("dark", isDark);
     const themeMeta = document.querySelector('meta[name="theme-color"]');
-    if (themeMeta) themeMeta.setAttribute("content", isDark ? "#030712" : "#f9fafb");
+    if (themeMeta) themeMeta.setAttribute("content", isDark ? "#111827" : "#f9fafb");
   } catch {}
 })();
 `;

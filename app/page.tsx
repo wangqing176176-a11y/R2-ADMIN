@@ -381,6 +381,12 @@ export default function R2Admin() {
     setResolvedDark(isDark);
     document.documentElement.classList.toggle("dark", isDark);
     try {
+      const themeMeta = document.querySelector('meta[name="theme-color"]');
+      if (themeMeta) themeMeta.setAttribute("content", isDark ? "#111827" : "#f9fafb");
+    } catch {
+      // ignore
+    }
+    try {
       localStorage.setItem(THEME_STORE_KEY, themeMode);
     } catch {
       // ignore
@@ -1706,7 +1712,7 @@ export default function R2Admin() {
                         onClick={() => setLoginAnnouncementOpen((v) => !v)}
                         className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
                       >
-                        {loginAnnouncementOpen ? "收起公告与说明" : "展开公告与说明"}
+                        {loginAnnouncementOpen ? "收起「公告与说明」" : "展开「公告与说明」"}
                         <ChevronDown
                           className={`w-4 h-4 text-gray-400 transition-transform ${loginAnnouncementOpen ? "rotate-180" : ""}`}
                         />
@@ -2185,7 +2191,7 @@ export default function R2Admin() {
   );
 
   return (
-    <div className="flex h-dvh md:h-screen bg-gray-50 text-gray-900 font-sans overflow-hidden dark:bg-gray-950 dark:text-gray-100">
+    <div className="flex h-dvh md:h-screen bg-gray-50 text-gray-900 font-sans overflow-hidden dark:bg-gray-900 dark:text-gray-100">
       {/* 移动端：左侧抽屉 */}
       <div className={`fixed inset-0 z-50 md:hidden ${mobileNavOpen ? "" : "pointer-events-none"}`}>
         <button
@@ -2548,7 +2554,7 @@ export default function R2Admin() {
 
         {/* 文件列表 */}
         <div
-          className={`flex-1 overflow-y-auto p-3 md:py-4 md:px-6 bg-gray-50/30 dark:bg-gray-950/25 ${loading ? "pointer-events-none" : ""}`}
+          className={`flex-1 overflow-y-auto p-3 md:py-4 md:px-6 bg-gray-50/30 dark:bg-gray-900 ${loading ? "pointer-events-none" : ""}`}
           onClick={() => {
             setSelectedItem(null);
           }}
