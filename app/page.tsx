@@ -2179,7 +2179,7 @@ export default function R2Admin() {
       </div>
 
       {/* 桌面端：左侧栏 */}
-      <div className="hidden md:flex w-64 shrink-0">
+      <div className="hidden md:flex w-[17rem] shrink-0">
         <SidebarPanel />
       </div>
 
