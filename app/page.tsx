@@ -2877,25 +2877,25 @@ export default function R2Admin() {
         <DetailsPanel />
       </div>
 
-      {/* 移动端：详情底部弹窗 */}
-      <div className={`fixed inset-0 z-50 md:hidden ${mobileDetailOpen ? "" : "pointer-events-none"}`}>
-        <button
-          type="button"
-          aria-label="关闭详情"
-          onClick={() => setMobileDetailOpen(false)}
-          className={`absolute inset-0 bg-black/40 transition-opacity ${mobileDetailOpen ? "opacity-100" : "opacity-0"}`}
-        />
-        <div
-          className={`absolute inset-x-0 bottom-0 transition-transform duration-200 ${
-            mobileDetailOpen ? "translate-y-0" : "translate-y-full"
-          }`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="h-[85dvh] bg-white rounded-t-2xl shadow-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">
-            <DetailsPanel compact onClose={() => setMobileDetailOpen(false)} />
-          </div>
-        </div>
-      </div>
+	      {/* 移动端：详情底部弹窗 */}
+	      <div className={`fixed inset-0 z-50 md:hidden ${mobileDetailOpen ? "" : "pointer-events-none"}`}>
+	        <button
+	          type="button"
+	          aria-label="关闭详情"
+	          onClick={() => setMobileDetailOpen(false)}
+	          className={`absolute inset-0 bg-black/40 transition-opacity ${mobileDetailOpen ? "opacity-100" : "opacity-0"}`}
+	        />
+	        <div
+	          className={`absolute inset-x-0 bottom-0 transition-transform duration-200 ${
+	            mobileDetailOpen ? "translate-y-0" : "translate-y-full"
+	          }`}
+	          onClick={(e) => e.stopPropagation()}
+	        >
+	          <div className="h-[60dvh] bg-white rounded-t-2xl shadow-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+	            <DetailsPanel compact onClose={() => setMobileDetailOpen(false)} />
+	          </div>
+	        </div>
+	      </div>
 
       {/* 旧版：右侧信息面板（已弃用） */}
       {false ? (
