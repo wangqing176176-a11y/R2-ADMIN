@@ -100,7 +100,7 @@ const BucketHintChip = ({
         strokeWidth={1.75}
       />
       <div className="min-w-0">
-        <div className="text-[10px] leading-tight text-gray-500 dark:text-gray-400">存储桶</div>
+        <div className="text-[10px] leading-tight text-gray-500 dark:text-gray-400">当前桶</div>
         <div className="mt-0.5 text-[11px] leading-tight font-normal text-blue-600 truncate max-w-[10.5rem] md:max-w-[16rem] dark:text-blue-300">
           {bucketName}
         </div>
