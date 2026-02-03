@@ -2038,16 +2038,16 @@ export default function R2Admin() {
 
       <div className={`flex-1 overflow-y-auto ${compact ? "p-4 space-y-5" : "p-6 space-y-8"}`}>
         {selectedItem ? (
-          <div className={`${compact ? "space-y-4" : "space-y-6"} animate-in fade-in slide-in-from-right-4 duration-300`}>
-            <div className={compact ? "flex items-center gap-3" : "flex flex-col items-center"}>
-              <div
-                className={`${
-                  compact ? "w-14 h-14 rounded-xl" : "w-24 h-24 rounded-2xl"
-                } bg-gray-50 border border-gray-100 flex items-center justify-center ${
-                  compact ? "" : "mb-4"
-                } shadow-sm dark:bg-gray-950 dark:border-gray-800`}
-              >
-                {getIcon(selectedItem.type, selectedItem.name)}
+	          <div className={`${compact ? "space-y-4" : "space-y-6"} animate-in fade-in slide-in-from-right-4 duration-300`}>
+	            <div className={compact ? "flex items-center gap-3" : "flex flex-col items-center"}>
+	              <div
+	                className={`${
+	                  compact ? "w-14 h-14 rounded-xl" : "w-16 h-16 rounded-2xl"
+	                } bg-gray-50 border border-gray-100 flex items-center justify-center ${
+	                  compact ? "" : "mb-4"
+	                } shadow-sm dark:bg-gray-950 dark:border-gray-800`}
+	              >
+	                {getIcon(selectedItem.type, selectedItem.name)}
               </div>
               <div className={compact ? "min-w-0 flex-1" : ""}>
                 <h3
@@ -2061,43 +2061,26 @@ export default function R2Admin() {
                   <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                     {selectedItem.type === "folder" ? "文件夹" : formatSize(selectedItem.size)}
                     {selectedItem.lastModified ? ` · ${new Date(selectedItem.lastModified).toLocaleDateString()}` : ""}
-                  </div>
-                ) : (
-                  <div className="mt-2 inline-flex items-center gap-2">
-                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-600 font-semibold dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
-                      {getFileTag(selectedItem)}
-                    </span>
-                    {selectedItem.type === "file" ? (
-                      <span className="text-[10px] text-gray-400 font-medium dark:text-gray-400">{formatSize(selectedItem.size)}</span>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {!compact ? (
-              <div className="space-y-0 text-sm border rounded-lg border-gray-100 overflow-hidden dark:border-gray-800">
-                <div className="flex justify-between p-3 bg-gray-50/50 border-b border-gray-100 dark:bg-gray-950/30 dark:border-gray-800">
-                  <span className="text-gray-500 dark:text-gray-400">类型</span>
-                  <span className="text-gray-900 font-medium dark:text-gray-100">{selectedItem.type === "folder" ? "文件夹" : "文件"}</span>
-                </div>
-                <div className="flex justify-between p-3 bg-white border-b border-gray-100 dark:bg-gray-900 dark:border-gray-800">
-                  <span className="text-gray-500 dark:text-gray-400">大小</span>
-                  <span className="text-gray-900 font-medium dark:text-gray-100">{formatSize(selectedItem.size)}</span>
-                </div>
-                <div className="flex justify-between p-3 bg-gray-50/50 dark:bg-gray-950/30">
-                  <span className="text-gray-500 dark:text-gray-400">修改时间</span>
-                  <span className="text-gray-900 font-medium text-right text-xs dark:text-gray-100">
-                    {selectedItem.lastModified ? new Date(selectedItem.lastModified).toLocaleDateString() : "-"}
-                  </span>
-                </div>
-              </div>
-            ) : null}
-
-            {selectedItem.type === "folder" ? (
-              <div className={`grid grid-cols-2 ${compact ? "gap-2 pt-1" : "gap-3 pt-2"}`}>
-                <button
-                  onClick={() => handleEnterFolder(selectedItem!.name)}
+	                  </div>
+	                ) : (
+	                  <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+	                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-600 font-semibold dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
+	                      {getFileTag(selectedItem)}
+	                    </span>
+	                    <span className="text-xs text-gray-500 dark:text-gray-400">
+	                      {selectedItem.type === "folder" ? "文件夹" : "文件"}
+	                      {selectedItem.type === "file" ? ` · ${formatSize(selectedItem.size)}` : ""}
+	                      {selectedItem.lastModified ? ` · ${new Date(selectedItem.lastModified).toLocaleDateString()}` : ""}
+	                    </span>
+	                  </div>
+	                )}
+	              </div>
+	            </div>
+	
+	            {selectedItem.type === "folder" ? (
+	              <div className={`grid grid-cols-2 ${compact ? "gap-2 pt-1" : "gap-3 pt-2"}`}>
+	                <button
+	                  onClick={() => handleEnterFolder(selectedItem!.name)}
                   className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors col-span-2"
                 >
                   <FolderOpen className="w-4 h-4" />
