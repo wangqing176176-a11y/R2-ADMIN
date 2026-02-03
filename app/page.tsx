@@ -1049,8 +1049,12 @@ export default function R2Admin() {
     }
   };
 
-  const getSignedDownloadUrl = async (bucket: string, key: string) => {
-    const res = await fetchWithAuth(`/api/download?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`);
+  const getSignedDownloadUrl = async (bucket: string, key: string, filename?: string) => {
+    const qs = new URLSearchParams();
+    qs.set("bucket", bucket);
+    qs.set("key", key);
+    if (filename) qs.set("filename", filename);
+    const res = await fetchWithAuth(`/api/download?${qs.toString()}`);
     const data = await res.json();
     if (!res.ok || !data.url) throw new Error(data.error || "download url failed");
     return data.url as string;
@@ -1156,7 +1160,7 @@ export default function R2Admin() {
 	    else if (/\.(txt|log|md|json|csv|ts|tsx|js|jsx|css|html|xml|yml|yaml)$/.test(lower)) kind = "text";
 
     try {
-      const url = await getSignedDownloadUrl(selectedBucket, item.key);
+      const url = await getSignedDownloadUrl(selectedBucket, item.key, item.name);
       const next: PreviewState = { name: item.name, key: item.key, bucket: selectedBucket, kind, url };
       setPreview(next);
       if (kind === "text") {

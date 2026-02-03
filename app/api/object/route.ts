@@ -49,7 +49,10 @@ export async function GET(req: NextRequest) {
     const download = searchParams.get("download") === "1";
     const filename = searchParams.get("filename");
 
+
     if (!bucketId || !key) return json(400, { error: "Missing params" });
+
+    const suggestedName = safeFilename(filename || key.split("/").pop() || "download");
 
     const payload = `object\n${bucketId}\n${key}\n${download ? "1" : "0"}`;
     await assertAdminOrToken(req, searchParams, payload);
@@ -69,10 +72,7 @@ export async function GET(req: NextRequest) {
     headers.set("Accept-Ranges", "bytes");
 
     if (download) {
-      headers.set(
-        "Content-Disposition",
-        `attachment; filename="${safeFilename(filename || key.split("/").pop() || "download")}"`,
-      );
+      headers.set("Content-Disposition", `attachment; filename="${suggestedName}"`);
     }
 
     if (range) {
@@ -82,6 +82,10 @@ export async function GET(req: NextRequest) {
 
       const contentType = obj.httpMetadata?.contentType;
       if (contentType) headers.set("Content-Type", contentType);
+
+      if (!download && (filename || contentType === "application/pdf")) {
+        headers.set("Content-Disposition", `inline; filename="${suggestedName}"`);
+      }
 
       if (totalSize != null) headers.set("Content-Range", `bytes ${range.start}-${range.end}/${totalSize}`);
       headers.set("Content-Length", String(length));
@@ -97,6 +101,10 @@ export async function GET(req: NextRequest) {
 
     const contentType = obj.httpMetadata?.contentType;
     if (contentType) headers.set("Content-Type", contentType);
+
+    if (!download && (filename || contentType === "application/pdf")) {
+      headers.set("Content-Disposition", `inline; filename="${suggestedName}"`);
+    }
 
     const size = obj.size ?? head?.size;
     if (typeof size === "number") headers.set("Content-Length", String(size));

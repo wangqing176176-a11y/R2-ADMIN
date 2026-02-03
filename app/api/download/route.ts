@@ -55,10 +55,10 @@ const encodeRFC5987ValueChars = (value: string) =>
     .replace(/['()]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
     .replace(/\*/g, "%2A");
 
-const buildContentDisposition = (filename: string) => {
+const buildContentDisposition = (filename: string, kind: "attachment" | "inline") => {
   const safeFallback = filename.replace(/[\/\\"]/g, "_");
   const encoded = encodeRFC5987ValueChars(filename);
-  return `attachment; filename="${safeFallback}"; filename*=UTF-8''${encoded}`;
+  return `${kind}; filename="${safeFallback}"; filename*=UTF-8''${encoded}`;
 };
 
 const getBucketNameForS3 = (bucketId: string) => {
@@ -97,7 +97,7 @@ const maybeGetPresignedUrl = async (opts: {
   const cmd = new GetObjectCommand({
     Bucket: bucketName,
     Key: opts.key,
-    ...(opts.download ? { ResponseContentDisposition: buildContentDisposition(opts.filename) } : {}),
+    ...(opts.filename ? { ResponseContentDisposition: buildContentDisposition(opts.filename, opts.download ? "attachment" : "inline") } : {}),
   });
 
   return await getSignedUrl(s3, cmd, { expiresIn: 15 * 60 });
