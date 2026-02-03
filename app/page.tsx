@@ -1799,7 +1799,7 @@ export default function R2Admin() {
 		        <div className="flex items-center gap-3 min-w-0">
 		          <BrandMark className="w-9 h-9 shrink-0" />
 		          <div className="min-w-0">
-		            <h1 className="font-bold text-base tracking-tight text-gray-800 truncate dark:text-gray-100">Qing&apos;s R2 Admin</h1>
+			            <h1 className="font-bold text-base tracking-tight text-blue-600 truncate dark:text-blue-400">Qing&apos;s R2 Admin</h1>
 		            <p className="text-[13px] text-gray-400 font-medium truncate dark:text-gray-400">{LOGIN_PAGE.subtitle}</p>
 		          </div>
 		        </div>
