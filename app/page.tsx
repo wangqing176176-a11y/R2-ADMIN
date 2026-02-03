@@ -2891,7 +2891,7 @@ export default function R2Admin() {
 	          }`}
 	          onClick={(e) => e.stopPropagation()}
 	        >
-	          <div className="h-[60dvh] bg-white rounded-t-2xl shadow-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+	          <div className="h-[70dvh] bg-white rounded-t-2xl shadow-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">
 	            <DetailsPanel compact onClose={() => setMobileDetailOpen(false)} />
 	          </div>
 	        </div>
