@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import Modal from "@/components/Modal";
 import { 
   Folder, Trash2, Upload, RefreshCw, 
-  Wifi, ChevronRight, Home, Search,
+  Wifi, ChevronRight, Search,
   Menu, Sun, Moon, Monitor, ChevronDown,
   FileText, Image as ImageIcon, Music, Video, Edit2,
   FileArchive, FileCode, FileSpreadsheet, FileType, FileJson,
@@ -95,7 +95,10 @@ const BucketHintChip = ({
         .filter(Boolean)
         .join(" ")}
     >
-      <HardDrive className="w-5 h-5 text-gray-400 shrink-0 dark:text-gray-500" />
+      <HardDrive
+        className="w-5 h-5 text-gray-500 shrink-0 dark:text-gray-300"
+        strokeWidth={1.75}
+      />
       <div className="min-w-0">
         <div className="text-[10px] leading-tight text-gray-500 dark:text-gray-400">当前存储桶：</div>
         <div className="mt-0.5 text-[11px] leading-tight font-normal text-blue-600 truncate max-w-[10.5rem] md:max-w-[16rem] dark:text-blue-300">
@@ -2400,7 +2403,7 @@ export default function R2Admin() {
 		                }}
 		                className="hover:bg-gray-100 px-2 py-1 rounded-md transition-colors text-gray-500 flex items-center gap-1 dark:text-gray-300 dark:hover:bg-gray-800"
 		              >
-		                <Home className="w-5 h-5" />
+		                <FolderOpen className="w-5 h-5 text-gray-500 dark:text-gray-300" strokeWidth={1.75} />
 		                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">根目录</span>
 		              </button>
 	              {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
@@ -2571,7 +2574,7 @@ export default function R2Admin() {
 		                    }}
 		                    className="hover:bg-gray-100 px-2 py-1 rounded-md transition-colors text-gray-500 flex items-center gap-1 dark:text-gray-300 dark:hover:bg-gray-800"
 		                  >
-		                    <Home className="w-5 h-5" />
+		                    <FolderOpen className="w-5 h-5 text-gray-500 dark:text-gray-300" strokeWidth={1.75} />
 		                    <span className="text-sm font-medium">根目录</span>
 		                  </button>
 	                  {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
