@@ -540,7 +540,7 @@ export default function R2Admin() {
       if (res.status === 401) {
         setAuthRequired(true);
         setConnectionStatus("error");
-        setConnectionDetail("需要管理密码（ADMIN_PASSWORD）");
+        setConnectionDetail("请刷新存储桶列表！");
         return;
       }
 
