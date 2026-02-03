@@ -13,6 +13,7 @@ import {
   Pause, Play, CircleX,
   Globe, BadgeInfo, Mail, BookOpen,
   FolderPlus,
+  HardDrive,
 } from "lucide-react";
 
 type ThemeMode = "system" | "light" | "dark";
@@ -63,6 +64,45 @@ const BrandMark = ({ className }: { className?: string }) => {
 
   return (
     <div aria-hidden="true" className={className} />
+  );
+};
+
+const BucketHintChip = ({
+  bucketName,
+  disabled,
+  onClick,
+  className,
+}: {
+  bucketName: string;
+  disabled?: boolean;
+  onClick?: () => void;
+  className?: string;
+}) => {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      title={bucketName}
+      aria-label="查看当前存储桶"
+      className={[
+        "inline-flex items-center gap-2 px-1 py-1 rounded-md text-left",
+        "transition-colors hover:text-gray-700 dark:hover:text-gray-200",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900",
+        "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-inherit",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <HardDrive className="w-5 h-5 text-gray-400 shrink-0 dark:text-gray-500" />
+      <div className="min-w-0">
+        <div className="text-[10px] leading-tight text-gray-500 dark:text-gray-400">当前存储桶：</div>
+        <div className="mt-0.5 text-[11px] leading-tight font-normal text-blue-600 truncate max-w-[10.5rem] md:max-w-[16rem] dark:text-blue-300">
+          {bucketName}
+        </div>
+      </div>
+    </button>
   );
 };
 
@@ -272,6 +312,7 @@ export default function R2Admin() {
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [bucketHintOpen, setBucketHintOpen] = useState(false);
 
   const uploadTasksRef = useRef<UploadTask[]>([]);
   const uploadProcessingRef = useRef(false);
@@ -1728,11 +1769,15 @@ export default function R2Admin() {
     );
   }
 
-  // --- 渲染：主界面 ---
-  const selectBucket = (bucketId: string) => {
-    setSelectedBucket(bucketId);
-    setPath([]);
-    setSearchTerm("");
+	  // --- 渲染：主界面 ---
+	  const selectedBucketDisplayName = selectedBucket
+	    ? buckets.find((b) => b.id === selectedBucket)?.Name ?? selectedBucket
+	    : null;
+
+	  const selectBucket = (bucketId: string) => {
+	    setSelectedBucket(bucketId);
+	    setPath([]);
+	    setSearchTerm("");
     setSelectedItem(null);
     setSelectedKeys(new Set());
     setBucketMenuOpen(false);
@@ -2345,21 +2390,21 @@ export default function R2Admin() {
             </div>
           </div>
 
-          {/* 桌面端：面包屑单独一行显示，避免被按钮挤压 */}
-          <div className="hidden md:flex items-start gap-1 px-6 py-2 border-t border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900">
-            <div className="flex flex-wrap items-center gap-1 text-sm text-gray-600 dark:text-gray-300">
-              <button
-                onClick={() => {
-                  setPath([]);
-                  setSearchTerm("");
-                }}
-                className="hover:bg-gray-100 px-2 py-1 rounded-md transition-colors text-gray-500 flex items-center gap-1 dark:text-gray-300 dark:hover:bg-gray-800"
-              >
-                <Home className="w-5 h-5" />
-                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">根目录</span>
-              </button>
-              {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
-              {path.map((folder, idx) => (
+		          {/* 桌面端：面包屑单独一行显示，避免被按钮挤压 */}
+		          <div className="hidden md:flex items-center justify-between gap-3 px-6 py-2 border-t border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900">
+		            <div className="flex flex-wrap items-center gap-1 text-sm text-gray-600 dark:text-gray-300 min-w-0">
+		              <button
+		                onClick={() => {
+		                  setPath([]);
+	                  setSearchTerm("");
+		                }}
+		                className="hover:bg-gray-100 px-2 py-1 rounded-md transition-colors text-gray-500 flex items-center gap-1 dark:text-gray-300 dark:hover:bg-gray-800"
+		              >
+		                <Home className="w-5 h-5" />
+		                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">根目录</span>
+		              </button>
+	              {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
+	              {path.map((folder, idx) => (
                 <React.Fragment key={idx}>
                   <button
                     onClick={() => handleBreadcrumbClick(idx)}
@@ -2369,9 +2414,14 @@ export default function R2Admin() {
                   </button>
                   {idx < path.length - 1 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
                 </React.Fragment>
-              ))}
-            </div>
-          </div>
+	              ))}
+		            </div>
+		            <BucketHintChip
+		              bucketName={selectedBucketDisplayName ?? "未选择"}
+		              disabled={!selectedBucket}
+		              onClick={() => setBucketHintOpen(true)}
+		            />
+		          </div>
 
           {/* 移动端：分行布局，避免按钮挤压 */}
           <div className="md:hidden px-3 py-2 space-y-2">
@@ -2510,37 +2560,45 @@ export default function R2Admin() {
               </button>
             </div>
 
-            {/* 移动端：面包屑移动到功能区下方、文件列表上方 */}
-            <div className="pt-1">
-              <div className="flex flex-wrap items-center gap-1 text-sm text-gray-600 dark:text-gray-300">
-                <button
-                  onClick={() => {
-                    setPath([]);
-                    setSearchTerm("");
-                  }}
-                  className="hover:bg-gray-100 px-2 py-1 rounded-md transition-colors text-gray-500 flex items-center gap-1 dark:text-gray-300 dark:hover:bg-gray-800"
-                >
-                  <Home className="w-5 h-5" />
-                  <span className="text-sm font-medium">根目录</span>
-                </button>
-                {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
-                {path.map((folder, idx) => (
-                  <React.Fragment key={idx}>
-                    <button
-                      onClick={() => handleBreadcrumbClick(idx)}
-                      className="hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors font-medium whitespace-nowrap dark:hover:text-blue-200 dark:hover:bg-blue-950/30"
-                    >
-                      {folder}
-                    </button>
-                    {idx < path.length - 1 && (
-                      <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />
-                    )}
-                  </React.Fragment>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+		            {/* 移动端：面包屑移动到功能区下方、文件列表上方 */}
+		            <div className="pt-1">
+		              <div className="flex items-center justify-between gap-2">
+		                <div className="flex flex-wrap items-center gap-1 text-sm text-gray-600 dark:text-gray-300 min-w-0">
+		                  <button
+		                    onClick={() => {
+		                      setPath([]);
+	                      setSearchTerm("");
+		                    }}
+		                    className="hover:bg-gray-100 px-2 py-1 rounded-md transition-colors text-gray-500 flex items-center gap-1 dark:text-gray-300 dark:hover:bg-gray-800"
+		                  >
+		                    <Home className="w-5 h-5" />
+		                    <span className="text-sm font-medium">根目录</span>
+		                  </button>
+	                  {path.length > 0 && <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />}
+	                  {path.map((folder, idx) => (
+	                    <React.Fragment key={idx}>
+	                      <button
+	                        onClick={() => handleBreadcrumbClick(idx)}
+	                        className="hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors font-medium whitespace-nowrap dark:hover:text-blue-200 dark:hover:bg-blue-950/30"
+	                      >
+	                        {folder}
+	                      </button>
+	                      {idx < path.length - 1 && (
+	                        <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 dark:text-gray-600" />
+	                      )}
+	                    </React.Fragment>
+	                  ))}
+	                </div>
+	                <BucketHintChip
+	                  bucketName={selectedBucketDisplayName ?? "未选择"}
+	                  disabled={!selectedBucket}
+	                  onClick={() => setBucketHintOpen(true)}
+	                  className="shrink-0"
+	                />
+	              </div>
+	            </div>
+	          </div>
+	        </div>
 
         <input type="file" multiple ref={fileInputRef} className="hidden" onChange={handleUpload} />
 
@@ -3030,11 +3088,35 @@ export default function R2Admin() {
       </div>
       ) : null}
 
-      <Modal
-        open={mkdirOpen}
-        title="新建文件夹"
-        description={path.length ? `当前位置：/${path.join("/")}/` : "当前位置：/（根目录）"}
-        onClose={() => { setMkdirOpen(false); setMkdirName(""); }}
+	      <Modal
+	        open={bucketHintOpen}
+	        title="当前存储桶"
+	        description="主页仅展示（不支持切换）；如需切换请在侧边栏/菜单中操作。"
+	        onClose={() => setBucketHintOpen(false)}
+	        footer={
+	          <div className="flex justify-end">
+	            <button
+	              onClick={() => setBucketHintOpen(false)}
+	              className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium"
+	            >
+	              知道了
+	            </button>
+	          </div>
+	        }
+	      >
+	        <div className="space-y-2">
+	          <div className="text-xs text-gray-500 dark:text-gray-400">桶名称</div>
+	          <div className="text-base font-semibold text-gray-900 break-all dark:text-gray-100">
+	            {selectedBucketDisplayName ?? "未选择"}
+	          </div>
+	        </div>
+	      </Modal>
+
+	      <Modal
+	        open={mkdirOpen}
+	        title="新建文件夹"
+	        description={path.length ? `当前位置：/${path.join("/")}/` : "当前位置：/（根目录）"}
+	        onClose={() => { setMkdirOpen(false); setMkdirName(""); }}
         footer={
           <div className="flex justify-end gap-2">
             <button
