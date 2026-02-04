@@ -121,11 +121,30 @@ export const getAdminPassword = (): string | null => {
   return pw && String(pw).length ? String(pw) : null;
 };
 
+export const getAdminUsername = (): string | null => {
+  const env = getEnv();
+  const u = (env["ADMIN_USERNAME"] as string | undefined | null) ?? null;
+  return u && String(u).length ? String(u) : null;
+};
+
+const isAdminHeaderAuth = (req: Request) => {
+  const requiredPw = getAdminPassword();
+  if (!requiredPw) return true;
+
+  const gotPw = req.headers.get("x-admin-password") ?? "";
+  if (gotPw !== requiredPw) return false;
+
+  const requiredUser = getAdminUsername();
+  if (!requiredUser) return true;
+
+  const gotUser = req.headers.get("x-admin-username") ?? "";
+  return gotUser === requiredUser;
+};
+
 export const assertAdmin = (req: Request) => {
   const required = getAdminPassword();
   if (!required) return;
-  const got = req.headers.get("x-admin-password") ?? "";
-  if (got !== required) {
+  if (!isAdminHeaderAuth(req)) {
     const err = new Error("Unauthorized") as Error & { status?: number };
     err.status = 401;
     throw err;
@@ -192,8 +211,7 @@ export const assertAdminOrToken = async (req: Request, searchParams: URLSearchPa
   const required = getAdminPassword();
   if (!required) return;
 
-  const got = req.headers.get("x-admin-password") ?? "";
-  if (got === required) return;
+  if (isAdminHeaderAuth(req)) return;
 
   const token = searchParams.get("token") ?? "";
   if (token && (await verifyAccessToken(payload, token))) return;

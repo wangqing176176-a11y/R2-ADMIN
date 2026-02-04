@@ -339,10 +339,10 @@ export default function R2Admin() {
   // --- 初始化 ---
   useEffect(() => {
     const stored = localStorage.getItem("admin_password");
-    if (stored) setAuth({ password: stored });
+    const storedUser = localStorage.getItem("admin_username");
+    if (stored) setAuth({ password: stored, ...(storedUser ? { username: storedUser } : {}) });
     if (stored) setRememberMe(true);
 
-    const storedUser = localStorage.getItem("admin_username");
     if (storedUser) setFormUsername(storedUser);
 
     const storedLinks = localStorage.getItem("r2_link_config_v1");
@@ -456,6 +456,7 @@ export default function R2Admin() {
       ...(options.headers as Record<string, string> | undefined),
     };
     if (!headers["content-type"] && typeof options.body === "string") headers["content-type"] = "application/json";
+    if (auth?.username) headers["x-admin-username"] = auth.username;
     if (auth?.password) headers["x-admin-password"] = auth.password;
     return fetch(url, { ...options, headers });
   };
@@ -470,7 +471,12 @@ export default function R2Admin() {
     try {
       setLoading(true);
       const res = await fetch("/api/buckets", {
-        headers: nextAuth?.password ? { "x-admin-password": nextAuth.password } : undefined,
+        headers: nextAuth?.password
+          ? {
+              ...(nextAuth?.username ? { "x-admin-username": nextAuth.username } : {}),
+              "x-admin-password": nextAuth.password,
+            }
+          : undefined,
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 401) {
@@ -487,6 +493,7 @@ export default function R2Admin() {
         else localStorage.removeItem("admin_username");
       } else {
         localStorage.removeItem("admin_password");
+        localStorage.removeItem("admin_username");
       }
       setAuthRequired(false);
       setBuckets(data.buckets || []);

@@ -59,6 +59,13 @@ Pages → 设置 → 环境变量（建议用“密钥”保存敏感值）：
 - 未设置：打开站点直接进入（任何人都能操作你绑定的桶）
 - 已设置：打开站点先出现“访问登录”页，输入密码后才能进入管理
 
+### `ADMIN_USERNAME`（文本 / 可选）
+
+开启“账号 + 密码”双校验。
+
+- 未设置：仅校验 `ADMIN_PASSWORD`（页面“管理账号”输入框不参与鉴权）
+- 已设置：同时校验账号与密码（账号必须等于 `ADMIN_USERNAME`）
+
 ### `R2_BUCKETS`（文本 / 可选）
 
 用于自定义桶显示名与顺序（也可避免误识别）。
@@ -115,5 +122,6 @@ A Cloudflare Pages + R2 bindings based admin panel. No custom server required. F
 ## Optional Env Vars
 
 - `ADMIN_PASSWORD` (secret): enable login + API auth
+- `ADMIN_USERNAME` (text): require username + password (optional)
 - `R2_BUCKETS` (text): bucket display names (CSV or JSON)
 - `ADMIN_TOKEN_SECRET` (secret): token signing secret for preview/download/upload URLs
