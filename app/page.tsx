@@ -1801,11 +1801,11 @@ export default function R2Admin() {
 	    >
 	      <div className="h-16 px-5 border-b border-gray-100 flex items-center justify-between gap-3 dark:border-gray-800">
 	        <div className="flex items-center gap-3 min-w-0">
-	          <BrandMark className="w-10 h-10 md:w-11 md:h-11 shrink-0" />
-	          <div className="min-w-0">
-		            <h1 className="font-bold text-base leading-tight tracking-tight text-blue-600 truncate dark:text-blue-400">Qing&apos;s R2 Admin</h1>
-	            <p className="mt-0.5 text-[13px] leading-tight text-gray-400 font-medium truncate dark:text-gray-400">{LOGIN_PAGE.subtitle}</p>
-	          </div>
+		          <BrandMark className="w-10 h-10 md:w-11 md:h-11 shrink-0" />
+		          <div className="min-w-0">
+			            <h1 className="font-bold text-[18px] leading-[1.15] tracking-tight text-blue-600 truncate dark:text-blue-400">Qing&apos;s R2 Admin</h1>
+	            <p className="mt-0.25 text-[13px] leading-[1.1] text-gray-400 font-medium truncate dark:text-gray-400">{LOGIN_PAGE.subtitle}</p>
+		          </div>
 	        </div>
 	        <div className="flex items-center gap-1">
 	          {onClose ? (
@@ -2220,7 +2220,7 @@ export default function R2Admin() {
 
       <div className="p-4 border-t border-gray-100 bg-gray-50 text-[10px] text-gray-400 text-center dark:border-gray-800 dark:bg-gray-950/30 dark:text-gray-400">
         <p>Qing&apos;s R2 Admin</p>
-        <p className="mt-0.5">Serverless R2 Manager</p>
+        <p className="mt-0.5">R2对象存储多功能管理工具</p>
       </div>
     </div>
   );
@@ -2426,14 +2426,14 @@ export default function R2Admin() {
               </button>
 			            <div className="flex items-center gap-3 min-w-0">
 			              <BrandMark className="w-10 h-10 shrink-0" />
-			              <div className="min-w-0">
-				                <div className="font-bold text-[16.7px] leading-tight tracking-tight text-blue-600 truncate dark:text-blue-400">
-				                  Qing&apos;s R2 Admin
-				                </div>
-				                <div className="mt-0.5 text-[12px] leading-tight text-gray-400 font-medium truncate dark:text-gray-400">
-				                  {LOGIN_PAGE.subtitle}
-				                </div>
-				              </div>
+				              <div className="min-w-0">
+					                <div className="font-bold text-[18px] leading-[1.15] tracking-tight text-blue-600 truncate dark:text-blue-400">
+					                  Qing&apos;s R2 Admin
+					                </div>
+					                <div className="mt-0.25 text-[12px] leading-[1.1] text-gray-400 font-medium truncate dark:text-gray-400">
+					                  {LOGIN_PAGE.subtitle}
+					                </div>
+					              </div>
 			            </div>
             </div>
 
@@ -3073,7 +3073,7 @@ export default function R2Admin() {
         
         <div className="p-4 border-t border-gray-100 bg-gray-50 text-[10px] text-gray-400 text-center">
           <p>Qing&apos;s R2 Admin</p>
-          <p className="mt-0.5">Serverless R2 Manager</p>
+          <p className="mt-0.5">R2对象存储多功能管理工具</p>
         </div>
       </div>
       ) : null}
