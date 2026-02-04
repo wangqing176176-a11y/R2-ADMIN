@@ -100,7 +100,7 @@ const maybeGetPresignedUrl = async (opts: {
     ...(opts.filename ? { ResponseContentDisposition: buildContentDisposition(opts.filename, opts.download ? "attachment" : "inline") } : {}),
   });
 
-  return await getSignedUrl(s3, cmd, { expiresIn: 15 * 60 });
+  return await getSignedUrl(s3, cmd, { expiresIn: 24 * 3600 });
 };
 
 export async function GET(req: NextRequest) {
@@ -130,7 +130,7 @@ export async function GET(req: NextRequest) {
 ${bucketId}
 ${key}
 ${download ? "1" : "0"}`;
-    const token = await issueAccessToken(payload, 15 * 60);
+    const token = await issueAccessToken(payload, 24 * 3600);
 
     const url = `${origin}/api/object?bucket=${encodeURIComponent(bucketId)}&key=${encodeURIComponent(key)}${download ? "&download=1" : ""}${
       filename ? `&filename=${encodeURIComponent(filename)}` : ""
