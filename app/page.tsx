@@ -55,7 +55,7 @@ const BrandMark = ({ className }: { className?: string }) => {
         src="/brand.png"
         alt=""
         aria-hidden="true"
-        className={["object-contain", className].filter(Boolean).join(" ")}
+        className={["block object-contain", className].filter(Boolean).join(" ")}
         onError={() => setFailed(true)}
         draggable={false}
       />
@@ -1793,22 +1793,22 @@ export default function R2Admin() {
     setToast(`已切换到：${name}`);
   };
 
-  const SidebarPanel = ({ onClose }: { onClose?: () => void }) => (
-    <div
-      className={`h-full w-full bg-white border-r border-gray-200 flex flex-col dark:bg-gray-900 dark:border-gray-800 ${
-        onClose ? "shadow-sm" : ""
-      }`}
-    >
+	  const SidebarPanel = ({ onClose }: { onClose?: () => void }) => (
+	    <div
+	      className={`h-full w-full bg-white border-r border-gray-200 flex flex-col dark:bg-gray-900 dark:border-gray-800 ${
+	        onClose ? "shadow-sm" : ""
+	      }`}
+	    >
 	      <div className="h-16 px-5 border-b border-gray-100 flex items-center justify-between gap-3 dark:border-gray-800">
-		        <div className="flex items-center gap-3 min-w-0">
-		          <BrandMark className="w-9 h-9 shrink-0" />
-		          <div className="min-w-0">
-			            <h1 className="font-bold text-base tracking-tight text-blue-600 truncate dark:text-blue-400">Qing&apos;s R2 Admin</h1>
-		            <p className="text-[13px] text-gray-400 font-medium truncate dark:text-gray-400">{LOGIN_PAGE.subtitle}</p>
-		          </div>
-		        </div>
-        <div className="flex items-center gap-1">
-          {onClose ? (
+	        <div className="flex items-center gap-3 min-w-0">
+	          <BrandMark className="w-10 h-10 md:w-11 md:h-11 shrink-0" />
+	          <div className="min-w-0">
+		            <h1 className="font-bold text-base leading-tight tracking-tight text-blue-600 truncate dark:text-blue-400">Qing&apos;s R2 Admin</h1>
+	            <p className="mt-0.5 text-[13px] leading-tight text-gray-400 font-medium truncate dark:text-gray-400">{LOGIN_PAGE.subtitle}</p>
+	          </div>
+	        </div>
+	        <div className="flex items-center gap-1">
+	          {onClose ? (
             <button
               type="button"
               onClick={onClose}
@@ -2424,17 +2424,17 @@ export default function R2Admin() {
               >
                 <Menu className="w-5 h-5" />
               </button>
-		            <div className="flex items-center gap-3 min-w-0">
-		              <BrandMark className="w-9 h-9 shrink-0" />
-		              <div className="min-w-0">
-			                <div className="font-bold text-[16.7px] leading-[1.5] tracking-tight text-blue-600 truncate dark:text-blue-400">
-			                  Qing&apos;s R2 Admin
-			                </div>
-			                <div className="-mt-0.5 text-[12px] leading-[1.1] text-gray-400 font-medium truncate dark:text-gray-400">
-			                  {LOGIN_PAGE.subtitle}
-			                </div>
-			              </div>
-		            </div>
+			            <div className="flex items-center gap-3 min-w-0">
+			              <BrandMark className="w-10 h-10 shrink-0" />
+			              <div className="min-w-0">
+				                <div className="font-bold text-[16.7px] leading-tight tracking-tight text-blue-600 truncate dark:text-blue-400">
+				                  Qing&apos;s R2 Admin
+				                </div>
+				                <div className="mt-0.5 text-[12px] leading-tight text-gray-400 font-medium truncate dark:text-gray-400">
+				                  {LOGIN_PAGE.subtitle}
+				                </div>
+				              </div>
+			            </div>
             </div>
 
             <div className="flex items-center gap-2">
