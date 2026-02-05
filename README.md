@@ -74,6 +74,13 @@ Pages → 设置 → 函数 → 绑定 → 添加：
 
 说明：配置齐全后，`/api/download` 会优先返回 presigned URL；未配置则自动回退到代理模式。
 
+你可以在页面左侧「连接状态正常」卡片下方看到当前传输通道提示：
+- `当前传输通道：R2 直连（S3 预签名）`：预览/下载会走 R2 直连（`*.r2.cloudflarestorage.com` + `X-Amz-*`）
+- `已启用直连能力，需在下方「链接设置」补全桶名后才会生效`：已配置 3 个密钥变量，但当前桶还没提供真实 bucket 名；此时预览/下载会自动回退为 Pages 代理（`/api/object`）
+- `当前传输通道：Pages 代理（R2 Binding）`：未配置 3 个密钥变量，预览/下载全部走代理
+
+> 备注：文件列表/重命名/移动/上传等“管理操作”始终通过 Pages Functions + R2 Binding 完成；“直连”只影响预览/下载这类大流量的数据传输。
+
 > 获取 Access Key：Cloudflare Dashboard → R2 → Manage R2 API Tokens / S3 API（创建 Access Key）。
 
 其他可选环境变量（建议用“密钥”保存敏感值）：
@@ -179,6 +186,13 @@ And provide a **binding-name → real bucket-name** mapping (choose one):
 - No extra env vars: set the real **S3 bucket name** once per binding in the UI (bottom-left “链接设置”).
 
 When configured, `/api/download` returns a presigned URL first; otherwise it falls back to the proxied `/api/object` URL.
+
+You can also check the current transfer mode in the left “connection status” card:
+- `R2 direct (S3 presigned)`: preview/download hits `*.r2.cloudflarestorage.com` with `X-Amz-*`
+- `Direct enabled, need bucket name in “Link settings”`: creds are set, but the current binding still needs the real bucket name; it will fall back to `/api/object`
+- `Pages proxy (R2 Binding)`: no creds, always proxy
+
+Note: listing/rename/move/upload always use Pages Functions + R2 bindings. “Direct” only affects preview/download.
 
 - `ADMIN_PASSWORD` (secret): enable login + API auth
 - `ADMIN_USERNAME` (text): require username + password (optional)
