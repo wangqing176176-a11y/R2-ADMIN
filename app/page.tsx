@@ -1952,9 +1952,9 @@ export default function R2Admin() {
             <div className="mt-1 text-[10px] leading-relaxed opacity-80">
               {(() => {
                 const mode = selectedBucket ? buckets.find((b) => b.id === selectedBucket)?.transferMode : undefined;
-                if (mode === "presigned") return "文件传输模式：R2 直连（S3 预签名）";
-                if (mode === "proxy") return "文件传输模式：Pages 代理（R2 Binding）";
-                return "文件传输模式：未检测";
+                if (mode === "presigned") return "当前数据传输模式：R2 直连";
+                if (mode === "proxy") return "当前数据传输模式：Pages 代理";
+                return "当前数据传输模式：未检测";
               })()}
             </div>
           ) : null}
