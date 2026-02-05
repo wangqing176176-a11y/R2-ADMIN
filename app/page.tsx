@@ -1999,7 +1999,7 @@ export default function R2Admin() {
                 if (mode === "presigned") return "当前传输通道：R2 直连（S3 预签名）";
 	                if (mode === "presigned_needs_bucket_name") {
 	                  if (cfg?.s3BucketName) return "当前传输通道：R2 直连（S3 预签名）";
-	                  return "已启用直连能力，需在下方「链接设置」补全桶名后才会生效";
+	                  return "当前传输通道：Pages 代理。已启用直连能力，配置「链接设置」补全桶名后才会生效";
 	                }
                 if (mode === "proxy") return "当前传输通道：Pages 代理（R2 Binding）";
                 return "当前传输通道：未检测";
