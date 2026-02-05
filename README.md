@@ -64,11 +64,13 @@ Pages → 设置 → 函数 → 绑定 → 添加：
 | `R2_ACCESS_KEY_ID` | Secret/Text | R2 Access Key ID |
 | `R2_SECRET_ACCESS_KEY` | Secret | R2 Secret Access Key |
 
-并提供 **binding 名 → 真实 R2 bucket 名** 的映射（两种方式任选其一）：
+并提供 **binding 名 → 真实 R2 bucket 名** 的映射（三种方式任选其一）：
 
 - 简单模式：直接把 `R2_BUCKETS` 的 value 写成真实 bucket 名（例如 `R2_BLOG:my-blog,R2_CLOUD:qing-cloud`）。
   - 好处：不需要额外变量；UI 显示名就是 bucket 名。
 - 自定义显示名：`R2_BUCKETS` 用于显示名/顺序（例如 `R2_BLOG:博客,R2_CLOUD:云盘`），同时新增 `R2_BUCKET_NAMES` 用于真实 bucket 名（例如 `R2_BLOG:my-blog,R2_CLOUD:qing-cloud`）。
+
+- 无需新增环境变量：在页面左侧底部的「链接设置」里，为每个绑定填写一次 **S3 桶名**（真实 bucket 名）。
 
 说明：配置齐全后，`/api/download` 会优先返回 presigned URL；未配置则自动回退到代理模式。
 
@@ -94,7 +96,10 @@ Pages → 设置 → 函数 → 绑定 → 添加：
 
 用于自定义桶显示名与顺序（也可避免误识别）。
 
-> 如果你启用了上面的 S3 预签名直连但没有配置 `R2_BUCKET_NAMES`，则 `R2_BUCKETS` 的 value 需要填写真实 bucket 名，否则无法生成 presigned URL。
+> 如果你启用了上面的 S3 预签名直连但没有配置 `R2_BUCKET_NAMES`，则需要通过以下任意方式提供真实 bucket 名：
+> 1) 直接把 `R2_BUCKETS` 的 value 写成真实 bucket 名；或
+> 2) 配置 `R2_BUCKET_NAMES`；或
+> 3) 在页面「链接设置」里填写 S3 桶名。
 
 支持两种格式：
 - CSV：`R2_BLOG:博客,R2_CLOUD:云盘`
@@ -170,6 +175,8 @@ And provide a **binding-name → real bucket-name** mapping (choose one):
 
 - Simple: set `R2_BUCKETS` values to real bucket names (e.g. `R2_BLOG:my-blog,R2_CLOUD:qing-cloud`).
 - Custom display names: keep `R2_BUCKETS` for display/order, and set `R2_BUCKET_NAMES` to real bucket names.
+
+- No extra env vars: set the real **S3 bucket name** once per binding in the UI (bottom-left “链接设置”).
 
 When configured, `/api/download` returns a presigned URL first; otherwise it falls back to the proxied `/api/object` URL.
 

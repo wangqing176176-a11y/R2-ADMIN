@@ -60,14 +60,16 @@ const getBucketNameForS3 = (bucketId: string) => {
   return null;
 };
 
-const getTransferModeForBucket = (bucketId: string): "presigned" | "proxy" => {
+type TransferMode = "presigned" | "proxy" | "presigned_needs_bucket_name";
+
+const getTransferModeForBucket = (bucketId: string): TransferMode => {
   const env = getEnv();
   const accountId = String(env["R2_ACCOUNT_ID"] ?? "").trim();
   const accessKeyId = String(env["R2_ACCESS_KEY_ID"] ?? "").trim();
   const secretAccessKey = String(env["R2_SECRET_ACCESS_KEY"] ?? "").trim();
   if (!accountId || !accessKeyId || !secretAccessKey) return "proxy";
   const bucketName = getBucketNameForS3(bucketId);
-  if (!bucketName) return "proxy";
+  if (!bucketName) return "presigned_needs_bucket_name";
   return "presigned";
 };
 

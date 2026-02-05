@@ -110,7 +110,7 @@ const BucketHintChip = ({
 };
 
 // --- 类型定义 ---
-type Bucket = { id: string; Name: string; CreationDate: string; transferMode?: "presigned" | "proxy" };
+type Bucket = { id: string; Name: string; CreationDate: string; transferMode?: "presigned" | "proxy" | "presigned_needs_bucket_name" };
 type FileItem = {
   name: string;
   key: string;
@@ -136,6 +136,7 @@ type AccountUsage = {
 type LinkConfig = {
   publicBaseUrl?: string;
   customBaseUrl?: string;
+  s3BucketName?: string;
 };
 type LinkConfigMap = Record<string, LinkConfig>;
 type PreviewState =
@@ -312,6 +313,7 @@ export default function R2Admin() {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkPublic, setLinkPublic] = useState("");
   const [linkCustom, setLinkCustom] = useState("");
+  const [linkS3BucketName, setLinkS3BucketName] = useState("");
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -1061,6 +1063,8 @@ export default function R2Admin() {
     qs.set("bucket", bucket);
     qs.set("key", key);
     if (filename) qs.set("filename", filename);
+    const cfg = getLinkConfig(bucket);
+    if (cfg.s3BucketName) qs.set("bucketName", cfg.s3BucketName);
     const res = await fetchWithAuth(`/api/download?${qs.toString()}`);
     const data = await res.json();
     if (!res.ok || !data.url) throw new Error(data.error || "download url failed");
@@ -1068,8 +1072,10 @@ export default function R2Admin() {
   };
 
   const getSignedDownloadUrlForced = async (bucket: string, key: string, filename: string) => {
+    const cfg = getLinkConfig(bucket);
+    const extra = cfg.s3BucketName ? `&bucketName=${encodeURIComponent(cfg.s3BucketName)}` : "";
     const res = await fetchWithAuth(
-      `/api/download?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}&download=1&filename=${encodeURIComponent(filename)}`,
+      `/api/download?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}&download=1&filename=${encodeURIComponent(filename)}${extra}`,
     );
     const data = await res.json();
     if (!res.ok || !data.url) throw new Error(data.error || "download url failed");
@@ -1127,6 +1133,7 @@ export default function R2Admin() {
     const current = getLinkConfig(selectedBucket);
     setLinkPublic(current.publicBaseUrl ?? "");
     setLinkCustom(current.customBaseUrl ?? "");
+    setLinkS3BucketName(current.s3BucketName ?? "");
     setLinkOpen(true);
   };
 
@@ -1134,7 +1141,8 @@ export default function R2Admin() {
     if (!selectedBucket) return;
     const publicBaseUrl = normalizeBaseUrl(linkPublic || undefined);
     const customBaseUrl = normalizeBaseUrl(linkCustom || undefined);
-    const next: LinkConfigMap = { ...linkConfigMap, [selectedBucket]: { publicBaseUrl, customBaseUrl } };
+    const s3BucketName = linkS3BucketName.trim() || undefined;
+    const next: LinkConfigMap = { ...linkConfigMap, [selectedBucket]: { publicBaseUrl, customBaseUrl, s3BucketName } };
     persistLinkConfigMap(next);
     setLinkOpen(false);
     setToast("已保存链接设置");
@@ -1952,9 +1960,14 @@ export default function R2Admin() {
             <div className="mt-1 text-[10px] leading-relaxed opacity-80">
               {(() => {
                 const mode = selectedBucket ? buckets.find((b) => b.id === selectedBucket)?.transferMode : undefined;
-                if (mode === "presigned") return "当前数据传输模式：R2 直连";
-                if (mode === "proxy") return "当前数据传输模式：Pages 代理";
-                return "当前数据传输模式：未检测";
+                const cfg = selectedBucket ? getLinkConfig(selectedBucket) : undefined;
+                if (mode === "presigned") return "当前传输通道：R2 直连（S3 预签名）";
+                if (mode === "presigned_needs_bucket_name") {
+                  if (cfg?.s3BucketName) return "当前传输通道：R2 直连（S3 预签名）";
+                  return "当前传输通道：R2 直连（待配置桶名）";
+                }
+                if (mode === "proxy") return "当前传输通道：Pages 代理（R2 Binding）";
+                return "当前传输通道：未检测";
               })()}
             </div>
           ) : null}
@@ -3279,6 +3292,17 @@ export default function R2Admin() {
               placeholder="例如：pub-xxxx.r2.dev"
             />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">S3 桶名（用于预签名直连，可选）</label>
+            <input
+              value={linkS3BucketName}
+              onChange={(e) => setLinkS3BucketName(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none dark:bg-gray-950 dark:border-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
+              placeholder="例如：qinghub-top"
+            />
+            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">填写 Cloudflare R2 的真实桶名后，可在不额外配置映射环境变量的情况下启用 S3 预签名直连。</div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">自定义域名（可选）</label>
             <input

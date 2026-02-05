@@ -73,11 +73,14 @@ const getBucketNameForS3 = (bucketId: string) => {
   return null;
 };
 
+const isValidBucketName = (name: string) => /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/i.test(name);
+
 const maybeGetPresignedUrl = async (opts: {
   bucketId: string;
   key: string;
   download: boolean;
   filename: string;
+  bucketNameOverride?: string;
 }) => {
   const env = getEnv();
   const accountId = String(env["R2_ACCOUNT_ID"] ?? "").trim();
@@ -85,7 +88,9 @@ const maybeGetPresignedUrl = async (opts: {
   const secretAccessKey = String(env["R2_SECRET_ACCESS_KEY"] ?? "").trim();
   if (!accountId || !accessKeyId || !secretAccessKey) return null;
 
-  const bucketName = getBucketNameForS3(opts.bucketId);
+  const bucketNameFromClient = String(opts.bucketNameOverride ?? "").trim();
+  const bucketName =
+    (bucketNameFromClient && isValidBucketName(bucketNameFromClient) ? bucketNameFromClient : "") || getBucketNameForS3(opts.bucketId);
   if (!bucketName) return null;
 
   const s3 = new S3Client({
@@ -109,6 +114,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const bucketId = searchParams.get("bucket");
+    const bucketName = (searchParams.get("bucketName") ?? "").trim();
     const key = searchParams.get("key");
     const download = searchParams.get("download") === "1";
     const filename = searchParams.get("filename") ?? "";
@@ -120,6 +126,7 @@ export async function GET(req: NextRequest) {
       key,
       download,
       filename: filename || key.split("/").pop() || "download",
+      bucketNameOverride: bucketName || undefined,
     });
 
     if (presigned) return NextResponse.json({ url: presigned });
