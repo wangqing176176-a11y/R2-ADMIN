@@ -50,7 +50,31 @@ Pages → 设置 → 函数 → 绑定 → 添加：
 
 ## 环境变量（可选）
 
-Pages → 设置 → 环境变量（建议用“密钥”保存敏感值）：
+### 启用「直连 R2」下载/预览（S3 预签名 / 推荐）
+
+默认情况下，本项目会通过 Pages Functions + R2 Binding（/api/object）代理文件流。
+如果你希望预览/下载更快、更稳定，并且浏览器能显示下载总大小，推荐启用 **S3 预签名直连**：
+站点只负责签发临时 URL，文件字节由浏览器直接从 R2 拉取。
+
+需要在 Pages → Settings → Environment variables 配置：
+
+| 变量名 | 类型建议 | 说明 |
+|---|---|---|
+| `R2_ACCOUNT_ID` | Text | Cloudflare Account ID（R2 S3 endpoint 需要） |
+| `R2_ACCESS_KEY_ID` | Secret/Text | R2 Access Key ID |
+| `R2_SECRET_ACCESS_KEY` | Secret | R2 Secret Access Key |
+
+并提供 **binding 名 → 真实 R2 bucket 名** 的映射（两种方式任选其一）：
+
+- 简单模式：直接把 `R2_BUCKETS` 的 value 写成真实 bucket 名（例如 `R2_BLOG:my-blog,R2_CLOUD:qing-cloud`）。
+  - 好处：不需要额外变量；UI 显示名就是 bucket 名。
+- 自定义显示名：`R2_BUCKETS` 用于显示名/顺序（例如 `R2_BLOG:博客,R2_CLOUD:云盘`），同时新增 `R2_BUCKET_NAMES` 用于真实 bucket 名（例如 `R2_BLOG:my-blog,R2_CLOUD:qing-cloud`）。
+
+说明：配置齐全后，`/api/download` 会优先返回 presigned URL；未配置则自动回退到代理模式。
+
+> 获取 Access Key：Cloudflare Dashboard → R2 → Manage R2 API Tokens / S3 API（创建 Access Key）。
+
+其他可选环境变量（建议用“密钥”保存敏感值）：
 
 ### `ADMIN_PASSWORD`（密钥 / 推荐）
 
@@ -70,9 +94,19 @@ Pages → 设置 → 环境变量（建议用“密钥”保存敏感值）：
 
 用于自定义桶显示名与顺序（也可避免误识别）。
 
+> 如果你启用了上面的 S3 预签名直连但没有配置 `R2_BUCKET_NAMES`，则 `R2_BUCKETS` 的 value 需要填写真实 bucket 名，否则无法生成 presigned URL。
+
 支持两种格式：
 - CSV：`R2_BLOG:博客,R2_CLOUD:云盘`
 - JSON：`{"R2_BLOG":"博客","R2_CLOUD":"云盘"}`
+
+### `R2_BUCKET_NAMES`（文本 / 可选）
+
+用于提供 **binding 名 → 真实 R2 bucket 名** 的映射（主要给 S3 预签名直连使用），从而让你可以把 `R2_BUCKETS` 单纯用于“显示名/排序”。
+
+格式支持 CSV 或 JSON，例如：
+- CSV：`R2_BLOG:my-blog,R2_CLOUD:qing-cloud`
+- JSON：`{"R2_BLOG":"my-blog","R2_CLOUD":"qing-cloud"}`
 
 ### `ADMIN_TOKEN_SECRET`（密钥 / 高级）
 
@@ -120,6 +154,24 @@ A Cloudflare Pages + R2 bindings based admin panel. No custom server required. F
 - Bindings: Pages → Settings → Functions → Bindings → R2 bucket (recommend binding names starting with `R2_`)
 
 ## Optional Env Vars
+
+### Presigned Direct URLs (Recommended)
+
+By default, this project proxies file bytes via Pages Functions + R2 Binding (`/api/object`).
+For faster and more reliable preview/download (and to let browsers show the total size), enable **S3 presigned URLs**: the site only signs a temporary URL, and the browser downloads/streams directly from R2.
+
+Set these env vars in Cloudflare Pages:
+
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+
+And provide a **binding-name → real bucket-name** mapping (choose one):
+
+- Simple: set `R2_BUCKETS` values to real bucket names (e.g. `R2_BLOG:my-blog,R2_CLOUD:qing-cloud`).
+- Custom display names: keep `R2_BUCKETS` for display/order, and set `R2_BUCKET_NAMES` to real bucket names.
+
+When configured, `/api/download` returns a presigned URL first; otherwise it falls back to the proxied `/api/object` URL.
 
 - `ADMIN_PASSWORD` (secret): enable login + API auth
 - `ADMIN_USERNAME` (text): require username + password (optional)

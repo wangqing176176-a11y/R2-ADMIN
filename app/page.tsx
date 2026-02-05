@@ -110,7 +110,7 @@ const BucketHintChip = ({
 };
 
 // --- 类型定义 ---
-type Bucket = { id: string; Name: string; CreationDate: string };
+type Bucket = { id: string; Name: string; CreationDate: string; transferMode?: "presigned" | "proxy" };
 type FileItem = {
   name: string;
   key: string;
@@ -1948,6 +1948,17 @@ export default function R2Admin() {
                     : "连接异常"}
             </span>
           </div>
+          {connectionStatus === "connected" ? (
+            <div className="mt-1 text-[10px] leading-relaxed opacity-80">
+              {(() => {
+                const mode = selectedBucket ? buckets.find((b) => b.id === selectedBucket)?.transferMode : undefined;
+                if (mode === "presigned") return "文件传输模式：R2 直连（S3 预签名）";
+                if (mode === "proxy") return "文件传输模式：Pages 代理（R2 Binding）";
+                return "文件传输模式：未检测";
+              })()}
+            </div>
+          ) : null}
+
           {connectionDetail ? (
             <div className="mt-1 text-[10px] leading-relaxed opacity-80">{connectionDetail}</div>
           ) : null}
