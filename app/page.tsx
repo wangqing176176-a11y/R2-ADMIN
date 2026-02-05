@@ -453,15 +453,27 @@ export default function R2Admin() {
   }, [auth]);
 
   // --- 核心：带鉴权的 Fetch ---
-  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
-    const headers: Record<string, string> = {
-      ...(options.headers as Record<string, string> | undefined),
-    };
-    if (!headers["content-type"] && typeof options.body === "string") headers["content-type"] = "application/json";
-    if (auth?.username) headers["x-admin-username"] = auth.username;
-    if (auth?.password) headers["x-admin-password"] = auth.password;
-    return fetch(url, { ...options, headers });
-  };
+	  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+	    const headers: Record<string, string> = {
+	      ...(options.headers as Record<string, string> | undefined),
+	    };
+	    if (!headers["content-type"] && typeof options.body === "string") headers["content-type"] = "application/json";
+	    if (auth?.username) headers["x-admin-username"] = auth.username;
+	    if (auth?.password) headers["x-admin-password"] = auth.password;
+	    return fetch(url, { ...options, headers });
+	  };
+
+	  const readJsonSafe = async (res: Response) => {
+	    try {
+	      return await res.clone().json();
+	    } catch {
+	      const text = await res
+	        .clone()
+	        .text()
+	        .catch(() => "");
+	      return text ? { error: text } : {};
+	    }
+	  };
 
   // --- 登录逻辑（可选 ADMIN_PASSWORD） ---
   const handleLogin = async (e: React.FormEvent) => {
@@ -1251,15 +1263,21 @@ export default function R2Admin() {
     file: File,
     onLoaded: (loaded: number) => void,
     signal?: AbortSignal,
-  ) => {
-    const signRes = await fetchWithAuth("/api/files", {
-      method: "POST",
-      body: JSON.stringify({ bucket, key, contentType: file.type }),
-    });
-    const signData = await signRes.json();
-    if (!signRes.ok || !signData.url) throw new Error(signData.error || "sign failed");
-    await xhrPut(signData.url, file, file.type, (loaded) => onLoaded(loaded), signal);
-  };
+	  ) => {
+	    let signRes: Response;
+	    try {
+	      signRes = await fetchWithAuth("/api/files", {
+	        method: "POST",
+	        body: JSON.stringify({ bucket, key, contentType: file.type }),
+	      });
+	    } catch (err: unknown) {
+	      const msg = err instanceof Error ? err.message : String(err);
+	      throw new Error(`Failed to fetch (POST /api/files): ${msg}`);
+	    }
+	    const signData = await readJsonSafe(signRes);
+	    if (!signRes.ok || !signData.url) throw new Error(signData.error || `sign failed (/api/files ${signRes.status})`);
+	    await xhrPut(signData.url, file, file.type, (loaded) => onLoaded(loaded), signal);
+	  };
 
   const uploadMultipartFile = async (
     taskId: string,
@@ -1299,17 +1317,23 @@ export default function R2Admin() {
       deleteResumeRecord(resumeKey);
     }
 
-    if (!uploadId) {
-      const createRes = await fetchWithAuth("/api/multipart", {
-        method: "POST",
-        body: JSON.stringify({ action: "create", bucket, key, contentType: file.type }),
-      });
-      const createData = await createRes.json();
-      if (!createRes.ok || !createData.uploadId) throw new Error(createData.error || "create multipart failed");
-      uploadId = createData.uploadId as string;
-      partsMap = {};
-      partSize = pickPartSize(file.size);
-    }
+	    if (!uploadId) {
+	      let createRes: Response;
+	      try {
+	        createRes = await fetchWithAuth("/api/multipart", {
+	          method: "POST",
+	          body: JSON.stringify({ action: "create", bucket, key, contentType: file.type }),
+	        });
+	      } catch (err: unknown) {
+	        const msg = err instanceof Error ? err.message : String(err);
+	        throw new Error(`Failed to fetch (POST /api/multipart create): ${msg}`);
+	      }
+	      const createData = await readJsonSafe(createRes);
+	      if (!createRes.ok || !createData.uploadId) throw new Error(createData.error || `create multipart failed (/api/multipart ${createRes.status})`);
+	      uploadId = createData.uploadId as string;
+	      partsMap = {};
+	      partSize = pickPartSize(file.size);
+	    }
 
     updateUploadTask(taskId, (t) => ({
       ...t,
@@ -1342,12 +1366,18 @@ export default function R2Admin() {
       const end = Math.min(file.size, start + partSize);
       const blob = file.slice(start, end);
 
-      const signRes = await fetchWithAuth("/api/multipart", {
-        method: "POST",
-        body: JSON.stringify({ action: "signPart", bucket, key, uploadId, partNumber }),
-      });
-      const signData = await signRes.json();
-      if (!signRes.ok || !signData.url) throw new Error(signData.error || "sign part failed");
+	      let signRes: Response;
+	      try {
+	        signRes = await fetchWithAuth("/api/multipart", {
+	          method: "POST",
+	          body: JSON.stringify({ action: "signPart", bucket, key, uploadId, partNumber }),
+	        });
+	      } catch (err: unknown) {
+	        const msg = err instanceof Error ? err.message : String(err);
+	        throw new Error(`Failed to fetch (POST /api/multipart signPart): ${msg}`);
+	      }
+	      const signData = await readJsonSafe(signRes);
+	      if (!signRes.ok || !signData.url) throw new Error(signData.error || `sign part failed (/api/multipart ${signRes.status})`);
 
       const completedBytes = Object.keys(partsMap).reduce((acc, pn) => {
         const n = Number.parseInt(pn, 10);
@@ -1399,13 +1429,19 @@ export default function R2Admin() {
         .map(([pn, etag]) => ({ partNumber: Number.parseInt(pn, 10), etag }))
         .filter((p) => Number.isFinite(p.partNumber) && p.partNumber > 0)
         .sort((a, b) => a.partNumber - b.partNumber);
-      const completeRes = await fetchWithAuth("/api/multipart", {
-        method: "POST",
-        body: JSON.stringify({ action: "complete", bucket, key, uploadId, parts }),
-      });
-      const completeData = await completeRes.json();
-      if (!completeRes.ok) throw new Error(completeData.error || "complete failed");
-      deleteResumeRecord(resumeKey);
+	      let completeRes: Response;
+	      try {
+	        completeRes = await fetchWithAuth("/api/multipart", {
+	          method: "POST",
+	          body: JSON.stringify({ action: "complete", bucket, key, uploadId, parts }),
+	        });
+	      } catch (err: unknown) {
+	        const msg = err instanceof Error ? err.message : String(err);
+	        throw new Error(`Failed to fetch (POST /api/multipart complete): ${msg}`);
+	      }
+	      const completeData = await readJsonSafe(completeRes);
+	      if (!completeRes.ok) throw new Error(completeData.error || `complete failed (/api/multipart ${completeRes.status})`);
+	      deleteResumeRecord(resumeKey);
     } catch (err) {
       aborted = true;
       const current = uploadTasksRef.current.find((t) => t.id === taskId);
@@ -1791,22 +1827,21 @@ export default function R2Admin() {
     );
   }
 
-	  // --- 渲染：主界面 ---
-	  const selectedBucketDisplayName = selectedBucket
-	    ? buckets.find((b) => b.id === selectedBucket)?.Name ?? selectedBucket
-	    : null;
+		  // --- 渲染：主界面 ---
+		  const getBucketLabel = (bucketId: string | null | undefined) => (bucketId ? bucketId : "");
+
+		  const selectedBucketDisplayName = selectedBucket ? getBucketLabel(selectedBucket) : null;
 
 	  const selectBucket = (bucketId: string) => {
 	    setSelectedBucket(bucketId);
 	    setPath([]);
 	    setSearchTerm("");
     setSelectedItem(null);
-    setSelectedKeys(new Set());
-    setBucketMenuOpen(false);
-    if (isMobile) setMobileNavOpen(false);
-    const name = buckets.find((b) => b.id === bucketId)?.Name ?? bucketId;
-    setToast(`已切换到：${name}`);
-  };
+	    setSelectedKeys(new Set());
+	    setBucketMenuOpen(false);
+	    if (isMobile) setMobileNavOpen(false);
+	    setToast(`已切换到：${getBucketLabel(bucketId)}`);
+	  };
 
 	  const SidebarPanel = ({ onClose }: { onClose?: () => void }) => (
 	    <div
@@ -1870,13 +1905,13 @@ export default function R2Admin() {
                   <option value="" disabled>
                     选择存储桶
                   </option>
-                  {buckets.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.Name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+	                  {buckets.map((b) => (
+	                    <option key={b.id} value={b.id}>
+	                      {getBucketLabel(b.id)}
+	                    </option>
+	                  ))}
+	                </select>
+	              </div>
             ) : (
               <div ref={bucketMenuRef} className="relative mt-2">
                 <button
@@ -1886,9 +1921,9 @@ export default function R2Admin() {
                   aria-haspopup="listbox"
                   aria-expanded={bucketMenuOpen}
                 >
-                  <span className="truncate">
-                    {selectedBucket ? buckets.find((b) => b.id === selectedBucket)?.Name ?? selectedBucket : "选择存储桶"}
-                  </span>
+	                  <span className="truncate">
+	                    {selectedBucket ? getBucketLabel(selectedBucket) : "选择存储桶"}
+	                  </span>
                   <ChevronDown
                     className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform ${
                       bucketMenuOpen ? "rotate-180" : ""
@@ -1916,9 +1951,9 @@ export default function R2Admin() {
                                 selectedBucket === bucket.id ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-700"
                               }`}
                             ></div>
-                            <span className="truncate">{bucket.Name}</span>
-                          </button>
-                        ))
+	                            <span className="truncate">{getBucketLabel(bucket.id)}</span>
+	                          </button>
+	                        ))
                       ) : (
                         <div className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">暂无桶</div>
                       )}

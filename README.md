@@ -67,7 +67,7 @@ Pages → 设置 → 函数 → 绑定 → 添加：
 并提供 **binding 名 → 真实 R2 bucket 名** 的映射（三种方式任选其一）：
 
 - 简单模式：直接把 `R2_BUCKETS` 的 value 写成真实 bucket 名（例如 `R2_BLOG:my-blog,R2_CLOUD:qing-cloud`）。
-  - 好处：不需要额外变量；UI 显示名就是 bucket 名。
+  - 好处：不需要额外变量；无需在 UI 额外填写；桶列表默认仍显示 Pages 的绑定名（例如 `R2_BLOG`）。
 - 自定义显示名：`R2_BUCKETS` 用于显示名/顺序（例如 `R2_BLOG:博客,R2_CLOUD:云盘`），同时新增 `R2_BUCKET_NAMES` 用于真实 bucket 名（例如 `R2_BLOG:my-blog,R2_CLOUD:qing-cloud`）。
 
 - 无需新增环境变量：在页面左侧底部的「链接设置」里，为每个绑定填写一次 **S3 桶名**（真实 bucket 名）。
@@ -94,7 +94,7 @@ Pages → 设置 → 函数 → 绑定 → 添加：
 
 ### `R2_BUCKETS`（文本 / 可选）
 
-用于自定义桶显示名与顺序（也可避免误识别）。
+用于限制/排序桶列表（也可避免误识别）。桶的显示名称默认使用 Pages 的绑定名（例如 `R2_BLOG`）。
 
 > 如果你启用了上面的 S3 预签名直连但没有配置 `R2_BUCKET_NAMES`，则需要通过以下任意方式提供真实 bucket 名：
 > 1) 直接把 `R2_BUCKETS` 的 value 写成真实 bucket 名；或
@@ -173,7 +173,7 @@ Set these env vars in Cloudflare Pages:
 
 And provide a **binding-name → real bucket-name** mapping (choose one):
 
-- Simple: set `R2_BUCKETS` values to real bucket names (e.g. `R2_BLOG:my-blog,R2_CLOUD:qing-cloud`).
+- Simple: set `R2_BUCKETS` values to real bucket names (e.g. `R2_BLOG:my-blog,R2_CLOUD:qing-cloud`). The UI still shows binding names by default (e.g. `R2_BLOG`).
 - Custom display names: keep `R2_BUCKETS` for display/order, and set `R2_BUCKET_NAMES` to real bucket names.
 
 - No extra env vars: set the real **S3 bucket name** once per binding in the UI (bottom-left “链接设置”).
@@ -182,5 +182,5 @@ When configured, `/api/download` returns a presigned URL first; otherwise it fal
 
 - `ADMIN_PASSWORD` (secret): enable login + API auth
 - `ADMIN_USERNAME` (text): require username + password (optional)
-- `R2_BUCKETS` (text): bucket display names (CSV or JSON)
+- `R2_BUCKETS` (text): optional allowlist/order (CSV or JSON)
 - `ADMIN_TOKEN_SECRET` (secret): token signing secret for preview/download/upload URLs
