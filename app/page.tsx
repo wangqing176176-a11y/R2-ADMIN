@@ -307,6 +307,9 @@ export default function R2Admin() {
   const bucketMenuRef = useRef<HTMLDivElement>(null);
   const [bucketMenuOpen, setBucketMenuOpen] = useState(false);
 
+  const transferModeMenuRef = useRef<HTMLDivElement>(null);
+  const [transferModeMenuOpen, setTransferModeMenuOpen] = useState(false);
+
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [resolvedDark, setResolvedDark] = useState(false);
 
@@ -441,6 +444,26 @@ export default function R2Admin() {
       document.removeEventListener("touchstart", onDown);
     };
   }, [bucketMenuOpen]);
+
+  useEffect(() => {
+    if (!transferModeMenuOpen) return;
+    const onDown = (e: Event) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (transferModeMenuRef.current && transferModeMenuRef.current.contains(target)) return;
+      setTransferModeMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown, { passive: true });
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+    };
+  }, [transferModeMenuOpen]);
+
+  useEffect(() => {
+    setTransferModeMenuOpen(false);
+  }, [selectedBucket]);
 
   useEffect(() => {
     try {
@@ -2130,7 +2153,7 @@ export default function R2Admin() {
 
 		                return (
 		                  <>
-		                    <div className="mt-1 text-[10px] leading-relaxed opacity-80">{line2}</div>
+		                    <div className="mt-1 text-[11px] leading-relaxed opacity-80">{line2}</div>
 		                    {line3 ? <div className="mt-1 text-[10px] leading-relaxed opacity-80">{line3}</div> : null}
 		                  </>
 		                );
@@ -2142,31 +2165,102 @@ export default function R2Admin() {
 	          ) : null}
 	        </div>
 
-          {connectionStatus === "connected" && selectedBucket ? (
-            <div className="px-3 py-2 rounded-md border border-gray-200 bg-white text-xs text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium truncate">传输模式</span>
-                <select
-                  value={getTransferModeOverride(selectedBucket)}
-                  onChange={(e) => {
-                    const v = (e.target.value || "auto") as TransferModeOverride;
-                    setTransferModeOverride(selectedBucket, v);
-                    setToast(v === "auto" ? "已切换传输模式（自动）" : v === "presigned" ? "已切换传输模式（R2 直连）" : "已切换传输模式（Pages 代理）");
-                  }}
-                  className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100"
-                  aria-label="切换传输模式"
-                  title="传输模式"
-                >
-                  <option value="auto">自动</option>
-                  <option value="presigned" disabled={buckets.find((b) => b.id === selectedBucket)?.transferMode === "proxy"}>
-                    R2 直连
-                  </option>
-                  <option value="proxy">Pages 代理</option>
-                </select>
-              </div>
-              <div className="mt-1 text-[10px] leading-relaxed opacity-80">默认自动选择；桶名校验失败会自动回退至「Pages 代理」。</div>
-            </div>
-          ) : null}
+	          {connectionStatus === "connected" && selectedBucket ? (
+	            <div className="px-3 py-2 rounded-md border border-gray-200 bg-white text-xs text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
+	              <div className="flex items-center justify-between gap-2">
+	                <span className="font-medium truncate">选择传输通道</span>
+                  {(() => {
+                    const current = getTransferModeOverride(selectedBucket);
+                    const canUsePresigned = buckets.find((b) => b.id === selectedBucket)?.transferMode !== "proxy";
+                    const label = current === "auto" ? "自动" : current === "presigned" ? "R2 直连" : "Pages 代理";
+                    return isMobile ? (
+                      <select
+                        value={current}
+                        onChange={(e) => {
+                          const v = (e.target.value || "auto") as TransferModeOverride;
+                          setTransferModeOverride(selectedBucket, v);
+                          setToast(v === "auto" ? "已切换传输模式（自动）" : v === "presigned" ? "已切换传输模式（R2 直连）" : "已切换传输模式（Pages 代理）");
+                        }}
+                        className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100"
+                        aria-label="切换传输模式"
+                        title="选择传输通道"
+                      >
+                        <option value="auto">自动</option>
+                        <option value="presigned" disabled={!canUsePresigned}>
+                          R2 直连
+                        </option>
+                        <option value="proxy">Pages 代理</option>
+                      </select>
+                    ) : (
+                      <div ref={transferModeMenuRef} className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setTransferModeMenuOpen((v) => !v)}
+                          className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100"
+                          aria-haspopup="listbox"
+                          aria-expanded={transferModeMenuOpen}
+                          title="选择传输通道"
+                        >
+                          <span className="leading-none">{label}</span>
+                          <ChevronDown className={`w-3.5 h-3.5 opacity-70 transition-transform ${transferModeMenuOpen ? "rotate-180" : ""}`} />
+                        </button>
+
+                        {transferModeMenuOpen ? (
+                          <div className="absolute right-0 top-[calc(100%+0.5rem)] z-30 min-w-[10rem] rounded-xl border border-gray-200 bg-white shadow-xl overflow-hidden dark:border-gray-800 dark:bg-gray-900">
+                            <div className="p-2 space-y-1">
+                              {(
+                                [
+                                  { value: "auto", label: "自动", disabled: false },
+                                  { value: "presigned", label: "R2 直连", disabled: !canUsePresigned },
+                                  { value: "proxy", label: "Pages 代理", disabled: false },
+                                ] as { value: TransferModeOverride; label: string; disabled: boolean }[]
+                              ).map((opt) => (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  disabled={opt.disabled}
+                                  onClick={() => {
+                                    setTransferModeMenuOpen(false);
+                                    setTransferModeOverride(selectedBucket, opt.value);
+                                    setToast(
+                                      opt.value === "auto"
+                                        ? "已切换传输模式（自动）"
+                                        : opt.value === "presigned"
+                                          ? "已切换传输模式（R2 直连）"
+                                          : "已切换传输模式（Pages 代理）",
+                                    );
+                                  }}
+                                  className={[
+                                    "w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-[11px] transition-colors",
+                                    opt.value === current
+                                      ? "bg-blue-50 text-blue-700 font-medium dark:bg-blue-950/40 dark:text-blue-200"
+                                      : "text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800",
+                                    opt.disabled ? "opacity-50 cursor-not-allowed hover:bg-transparent dark:hover:bg-transparent" : "",
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" ")}
+                                  role="option"
+                                  aria-selected={opt.value === current}
+                                >
+                                  <span>{opt.label}</span>
+                                  <span
+                                    className={[
+                                      "w-2 h-2 rounded-full",
+                                      opt.value === current ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-700",
+                                    ].join(" ")}
+                                    aria-hidden="true"
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
+	              </div>
+	            </div>
+	          ) : null}
 	
 	        <div className="px-3 py-2 rounded-md border border-gray-200 bg-white text-xs text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
 	          <div className="flex items-center justify-between gap-2">
