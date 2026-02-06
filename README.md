@@ -72,12 +72,17 @@ Pages → 设置 → 函数 → 绑定 → 添加：
 
 - 无需新增环境变量：在页面左侧底部的「链接设置」里，为每个绑定填写一次 **S3 桶名**（真实 bucket 名）。
 
-说明：配置齐全后，`/api/download` 会优先返回 presigned URL；未配置则自动回退到代理模式。
+说明：配置齐全后，`/api/download` 会优先返回 presigned URL；未配置则自动回退到代理模式。通过「链接设置」填写桶名时，系统会自动做一次桶名校验；校验失败会提示原因，并在预览/下载时自动回退到 Pages 代理。
 
-你可以在页面左侧「连接状态正常」卡片下方看到当前传输通道提示：
-- `当前传输通道：R2 直连（S3 预签名）`：预览/下载会走 R2 直连（`*.r2.cloudflarestorage.com` + `X-Amz-*`）
-- `已启用直连能力，需在下方「链接设置」补全桶名后才会生效`：已配置 3 个密钥变量，但当前桶还没提供真实 bucket 名；此时预览/下载会自动回退为 Pages 代理（`/api/object`）
-- `当前传输通道：Pages 代理（R2 Binding）`：未配置 3 个密钥变量，预览/下载全部走代理
+你可以在页面左侧「连接状态正常」卡片里看到当前传输通道提示（分行展示）：
+- `当前传输通道：R2 直连`：预览/下载会走 R2 直连（`*.r2.cloudflarestorage.com` + `X-Amz-*`）
+- `当前传输通道：Pages 代理`：预览/下载会走 Pages 代理（`/api/object`）
+- 当需要提示原因时，会额外显示第三行，例如：`桶名未校验：xxx` / `桶名校验失败：xxx...已回退至「Pages 代理」`
+
+并且你可以在其下方的「选择传输通道」里手动切换（按桶保存）：
+- `自动`（默认）：满足直连条件时用 R2 直连，否则回退 Pages 代理
+- `R2 直连`：优先尝试直连（桶名校验失败仍会回退 Pages 代理）
+- `Pages 代理`：强制走 Pages 代理
 
 > 备注：文件列表/重命名/移动/上传等“管理操作”始终通过 Pages Functions + R2 Binding 完成；“直连”只影响预览/下载这类大流量的数据传输。
 
@@ -185,12 +190,17 @@ And provide a **binding-name → real bucket-name** mapping (choose one):
 
 - No extra env vars: set the real **S3 bucket name** once per binding in the UI (bottom-left “链接设置”).
 
-When configured, `/api/download` returns a presigned URL first; otherwise it falls back to the proxied `/api/object` URL.
+When configured, `/api/download` returns a presigned URL first; otherwise it falls back to the proxied `/api/object` URL. If you provide the bucket name via the UI “Link settings”, the app will validate it once when saving; on failure it shows a hint and preview/download will fall back to Pages proxy automatically.
 
-You can also check the current transfer mode in the left “connection status” card:
-- `R2 direct (S3 presigned)`: preview/download hits `*.r2.cloudflarestorage.com` with `X-Amz-*`
-- `Direct enabled, need bucket name in “Link settings”`: creds are set, but the current binding still needs the real bucket name; it will fall back to `/api/object`
-- `Pages proxy (R2 Binding)`: no creds, always proxy
+You can also check the current transfer channel in the left “connection status” card:
+- `Current channel: R2 direct`: preview/download hits `*.r2.cloudflarestorage.com` with `X-Amz-*`
+- `Current channel: Pages proxy`: preview/download uses `/api/object`
+- When needed, it shows an extra line like: `Bucket name not checked: ...` / `Bucket check failed: ... fallback to Pages proxy`
+
+You can manually switch it per bucket in “选择传输通道”:
+- `Auto` (default): use direct when possible, otherwise proxy
+- `R2 direct`: prefer direct (still falls back on invalid bucket name)
+- `Pages proxy`: force proxy
 
 Note: listing/rename/move/upload always use Pages Functions + R2 bindings. “Direct” only affects preview/download.
 
