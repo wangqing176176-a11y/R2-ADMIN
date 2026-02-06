@@ -139,6 +139,13 @@ type LinkConfig = {
   s3BucketName?: string;
 };
 type LinkConfigMap = Record<string, LinkConfig>;
+type S3BucketNameCheck = {
+  bucketName: string;
+  ok: boolean;
+  hint?: string;
+  checkedAt: number;
+};
+type S3BucketNameCheckMap = Record<string, S3BucketNameCheck>;
 type PreviewState =
   | null
   | {
@@ -282,6 +289,7 @@ export default function R2Admin() {
   const [searchCursor, setSearchCursor] = useState<string | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [linkConfigMap, setLinkConfigMap] = useState<LinkConfigMap>({});
+  const [s3BucketNameCheckMap, setS3BucketNameCheckMap] = useState<S3BucketNameCheckMap>({});
 
   const [toast, setToast] = useState<ToastState>(null);
   const toastPayload = useMemo(() => normalizeToast(toast), [toast]);
@@ -353,6 +361,15 @@ export default function R2Admin() {
         setLinkConfigMap(JSON.parse(storedLinks));
       } catch {
         localStorage.removeItem("r2_link_config_v1");
+      }
+    }
+
+    const storedChecks = localStorage.getItem("r2_s3_bucket_check_v1");
+    if (storedChecks) {
+      try {
+        setS3BucketNameCheckMap(JSON.parse(storedChecks));
+      } catch {
+        localStorage.removeItem("r2_s3_bucket_check_v1");
       }
     }
   }, []);
@@ -728,9 +745,47 @@ export default function R2Admin() {
     localStorage.setItem("r2_link_config_v1", JSON.stringify(next));
   };
 
+  const upsertS3BucketNameCheck = (bucketId: string, rec: S3BucketNameCheck) => {
+    setS3BucketNameCheckMap((prev) => {
+      const next = { ...prev, [bucketId]: rec };
+      localStorage.setItem("r2_s3_bucket_check_v1", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const deleteS3BucketNameCheck = (bucketId: string) => {
+    setS3BucketNameCheckMap((prev) => {
+      if (!(bucketId in prev)) return prev;
+      const next = { ...prev };
+      delete next[bucketId];
+      localStorage.setItem("r2_s3_bucket_check_v1", JSON.stringify(next));
+      return next;
+    });
+  };
+
   const getLinkConfig = (bucketName: string | null): LinkConfig => {
     if (!bucketName) return {};
     return linkConfigMap[bucketName] ?? {};
+  };
+
+  const getS3BucketNameCheck = (bucketId: string | null) => {
+    if (!bucketId) return null;
+    const cfg = getLinkConfig(bucketId);
+    const bucketName = (cfg.s3BucketName ?? "").trim();
+    if (!bucketName) return null;
+    const rec = s3BucketNameCheckMap[bucketId];
+    if (!rec) return null;
+    if (rec.bucketName !== bucketName) return null;
+    return rec;
+  };
+
+  const getS3BucketNameOverride = (bucketId: string) => {
+    const cfg = getLinkConfig(bucketId);
+    const bucketName = (cfg.s3BucketName ?? "").trim();
+    if (!bucketName) return "";
+    const rec = getS3BucketNameCheck(bucketId);
+    if (rec && rec.ok === false) return "";
+    return bucketName;
   };
 
   const normalizeBaseUrl = (raw?: string) => {
@@ -1075,8 +1130,8 @@ export default function R2Admin() {
     qs.set("bucket", bucket);
     qs.set("key", key);
     if (filename) qs.set("filename", filename);
-    const cfg = getLinkConfig(bucket);
-    if (cfg.s3BucketName) qs.set("bucketName", cfg.s3BucketName);
+    const bucketNameOverride = getS3BucketNameOverride(bucket);
+    if (bucketNameOverride) qs.set("bucketName", bucketNameOverride);
     const res = await fetchWithAuth(`/api/download?${qs.toString()}`);
     const data = await res.json();
     if (!res.ok || !data.url) throw new Error(data.error || "download url failed");
@@ -1084,8 +1139,8 @@ export default function R2Admin() {
   };
 
   const getSignedDownloadUrlForced = async (bucket: string, key: string, filename: string) => {
-    const cfg = getLinkConfig(bucket);
-    const extra = cfg.s3BucketName ? `&bucketName=${encodeURIComponent(cfg.s3BucketName)}` : "";
+    const bucketNameOverride = getS3BucketNameOverride(bucket);
+    const extra = bucketNameOverride ? `&bucketName=${encodeURIComponent(bucketNameOverride)}` : "";
     const res = await fetchWithAuth(
       `/api/download?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}&download=1&filename=${encodeURIComponent(filename)}${extra}`,
     );
@@ -1149,7 +1204,7 @@ export default function R2Admin() {
     setLinkOpen(true);
   };
 
-  const saveLinkConfig = () => {
+  const saveLinkConfig = async () => {
     if (!selectedBucket) return;
     const publicBaseUrl = normalizeBaseUrl(linkPublic || undefined);
     const customBaseUrl = normalizeBaseUrl(linkCustom || undefined);
@@ -1157,7 +1212,24 @@ export default function R2Admin() {
     const next: LinkConfigMap = { ...linkConfigMap, [selectedBucket]: { publicBaseUrl, customBaseUrl, s3BucketName } };
     persistLinkConfigMap(next);
     setLinkOpen(false);
-    setToast("已保存链接设置");
+
+    if (!s3BucketName) {
+      deleteS3BucketNameCheck(selectedBucket);
+      setToast("已保存链接设置");
+      return;
+    }
+
+    try {
+      const res = await fetchWithAuth(`/api/bucket-check?bucketName=${encodeURIComponent(s3BucketName)}`);
+      const data = await readJsonSafe(res);
+      const ok = Boolean((data as { ok?: unknown }).ok);
+      const hint = String((data as { hint?: unknown }).hint ?? "").trim();
+      upsertS3BucketNameCheck(selectedBucket, { bucketName: s3BucketName, ok, hint: hint || undefined, checkedAt: Date.now() });
+      setToast(ok ? "已保存链接设置（桶名校验通过）" : `已保存链接设置（桶名校验失败：${hint || "请检查桶名"}）`);
+    } catch {
+      upsertS3BucketNameCheck(selectedBucket, { bucketName: s3BucketName, ok: false, hint: "校验失败", checkedAt: Date.now() });
+      setToast("已保存链接设置（桶名校验失败）");
+    }
   };
 
   const copyLinkForItem = async (item: FileItem, kind: "public" | "custom") => {
@@ -1993,19 +2065,25 @@ export default function R2Admin() {
           </div>
           {connectionStatus === "connected" ? (
             <div className="mt-1 text-[10px] leading-relaxed opacity-80">
-              {(() => {
-                const mode = selectedBucket ? buckets.find((b) => b.id === selectedBucket)?.transferMode : undefined;
-                const cfg = selectedBucket ? getLinkConfig(selectedBucket) : undefined;
-                if (mode === "presigned") return "当前传输通道：R2 直连";
-	                if (mode === "presigned_needs_bucket_name") {
-	                  if (cfg?.s3BucketName) return "当前传输通道：R2 直连";
-	                  return "当前传输通道：Pages 代理。已启用直连能力，配置「链接设置」补全桶名后才会生效";
-	                }
-                if (mode === "proxy") return "当前传输通道：Pages 代理";
-                return "当前传输通道：未检测";
-              })()}
-            </div>
-          ) : null}
+	              {(() => {
+	                const mode = selectedBucket ? buckets.find((b) => b.id === selectedBucket)?.transferMode : undefined;
+	                const cfg = selectedBucket ? getLinkConfig(selectedBucket) : undefined;
+                  const s3BucketName = String(cfg?.s3BucketName ?? "").trim();
+                  const s3Check = selectedBucket ? getS3BucketNameCheck(selectedBucket) : null;
+	                if (mode === "presigned") return "当前传输通道：R2 直连";
+                  if (mode === "presigned_needs_bucket_name") {
+                    if (s3BucketName) {
+                      if (!s3Check) return `当前传输通道：R2 直连（桶名未校验：${s3BucketName}）`;
+                      if (s3Check.ok) return "当前传输通道：R2 直连（桶名校验通过）";
+                      return `当前传输通道：R2 直连（桶名校验失败：${s3BucketName}，${s3Check.hint || "请检查桶名"}，已回退 Pages 代理）`;
+                    }
+                    return "当前传输通道：Pages 代理。已启用直连能力，配置「链接设置」补全桶名后才会生效";
+                  }
+	                if (mode === "proxy") return "当前传输通道：Pages 代理";
+	                return "当前传输通道：未检测";
+	              })()}
+	            </div>
+	          ) : null}
 
           {connectionDetail ? (
             <div className="mt-1 text-[10px] leading-relaxed opacity-80">{connectionDetail}</div>
