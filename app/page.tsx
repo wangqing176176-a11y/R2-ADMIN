@@ -2075,9 +2075,9 @@ export default function R2Admin() {
                     if (s3BucketName) {
                       if (!s3Check) return `当前传输通道：R2 直连（桶名未校验：${s3BucketName}）`;
                       if (s3Check.ok) return "当前传输通道：R2 直连（桶名校验通过）";
-                      return `当前传输通道：R2 直连（桶名校验失败：${s3BucketName}，${s3Check.hint || "请检查桶名"}，已回退 Pages 代理）`;
+                      return `当前传输通道：R2 直连（桶名校验失败：${s3BucketName}，${s3Check.hint || "请检查桶名"}，已回退至「Pages 代理」通道）`;
                     }
-                    return "当前传输通道：Pages 代理。已启用直连能力，配置「链接设置」补全桶名后才会生效";
+                    return "当前传输通道：Pages 代理。已配置 R2 直连，如需启动 R2 直连，需在「链接设置」填写桶名后才会生效";
                   }
 	                if (mode === "proxy") return "当前传输通道：Pages 代理";
 	                return "当前传输通道：未检测";
