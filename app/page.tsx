@@ -2081,7 +2081,7 @@ export default function R2Admin() {
         >
 	          <div className="flex items-center gap-2">
 	            <Wifi className="w-3 h-3" />
-	            <span className="font-semibold">
+	            <span className="font-medium">
 	              {connectionStatus === "connected"
 	                ? "连接状态正常"
 	                : connectionStatus === "checking"
@@ -2130,42 +2130,47 @@ export default function R2Admin() {
 
 		                return (
 		                  <>
-                        <div className="mt-1 flex items-center justify-between gap-2">
-                          <div className="min-w-0 text-[11px] font-semibold leading-relaxed opacity-90 truncate">{line2}</div>
-                          {selectedBucket ? (
-                            <select
-                              value={overrideMode}
-                              onChange={(e) => {
-                                const v = (e.target.value || "auto") as TransferModeOverride;
-                                setTransferModeOverride(selectedBucket, v);
-                                setToast(v === "auto" ? "已切换传输模式（自动）" : v === "presigned" ? "已切换传输模式（R2 直连）" : "已切换传输模式（Pages 代理）");
-                              }}
-                              className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100"
-                              aria-label="切换传输模式"
-                              title="传输模式"
-                            >
-                              <option value="auto">自动</option>
-                              <option value="presigned" disabled={mode === "proxy"}>
-                                R2 直连
-                              </option>
-                              <option value="proxy">Pages 代理</option>
-                            </select>
-                          ) : null}
-                        </div>
+		                    <div className="mt-1 text-[10px] leading-relaxed opacity-80">{line2}</div>
 		                    {line3 ? <div className="mt-1 text-[10px] leading-relaxed opacity-80">{line3}</div> : null}
 		                  </>
 		                );
 		              })()
 		            : null}
 
-          {connectionDetail ? (
-            <div className="mt-1 text-[10px] leading-relaxed opacity-80">{connectionDetail}</div>
-          ) : null}
-        </div>
+	          {connectionDetail ? (
+	            <div className="mt-1 text-[10px] leading-relaxed opacity-80">{connectionDetail}</div>
+	          ) : null}
+	        </div>
 
-        <div className="px-3 py-2 rounded-md border border-gray-200 bg-white text-xs text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-medium truncate">当前桶占用估算</span>
+          {connectionStatus === "connected" && selectedBucket ? (
+            <div className="px-3 py-2 rounded-md border border-gray-200 bg-white text-xs text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium truncate">传输模式</span>
+                <select
+                  value={getTransferModeOverride(selectedBucket)}
+                  onChange={(e) => {
+                    const v = (e.target.value || "auto") as TransferModeOverride;
+                    setTransferModeOverride(selectedBucket, v);
+                    setToast(v === "auto" ? "已切换传输模式（自动）" : v === "presigned" ? "已切换传输模式（R2 直连）" : "已切换传输模式（Pages 代理）");
+                  }}
+                  className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100"
+                  aria-label="切换传输模式"
+                  title="传输模式"
+                >
+                  <option value="auto">自动</option>
+                  <option value="presigned" disabled={buckets.find((b) => b.id === selectedBucket)?.transferMode === "proxy"}>
+                    R2 直连
+                  </option>
+                  <option value="proxy">Pages 代理</option>
+                </select>
+              </div>
+              <div className="mt-1 text-[10px] leading-relaxed opacity-80">默认自动选择；桶名校验失败会自动回退至「Pages 代理」。</div>
+            </div>
+          ) : null}
+	
+	        <div className="px-3 py-2 rounded-md border border-gray-200 bg-white text-xs text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
+	          <div className="flex items-center justify-between gap-2">
+	            <span className="font-medium truncate">当前桶占用估算</span>
             <button
               onClick={() => selectedBucket && fetchBucketUsage(selectedBucket)}
               disabled={!selectedBucket || usageLoading}
