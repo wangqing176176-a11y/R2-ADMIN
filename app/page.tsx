@@ -2509,12 +2509,12 @@ export default function R2Admin() {
           </div>
         )}
 
-        {!compact ? (
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100 dark:from-blue-950/35 dark:to-indigo-950/25 dark:border-blue-900">
-            <h3 className="text-[10px] font-bold text-blue-800 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
-              当前视图统计
-            </h3>
+	        {!compact ? (
+	          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100 dark:from-blue-950/35 dark:to-indigo-950/25 dark:border-blue-900">
+	            <h3 className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-4 flex items-center gap-2">
+	              <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+	              当前视图统计
+	            </h3>
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-xs text-gray-500 dark:text-gray-400">文件数</span>
@@ -3364,11 +3364,11 @@ export default function R2Admin() {
             </div>
           )}
 
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100">
-            <h3 className="text-[10px] font-bold text-blue-800 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
-              当前视图统计
-            </h3>
+	          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100">
+	            <h3 className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-4 flex items-center gap-2">
+	              <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+	              当前视图统计
+	            </h3>
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-xs text-gray-500">文件数</span>
