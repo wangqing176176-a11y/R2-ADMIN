@@ -117,17 +117,20 @@ export async function GET(req: NextRequest) {
     const bucketName = (searchParams.get("bucketName") ?? "").trim();
     const key = searchParams.get("key");
     const download = searchParams.get("download") === "1";
+    const forceProxy = searchParams.get("forceProxy") === "1";
     const filename = searchParams.get("filename") ?? "";
 
     if (!bucketId || !key) return NextResponse.json({ error: "Missing params" }, { status: 400 });
 
-    const presigned = await maybeGetPresignedUrl({
-      bucketId,
-      key,
-      download,
-      filename: filename || key.split("/").pop() || "download",
-      bucketNameOverride: bucketName || undefined,
-    });
+    const presigned = forceProxy
+      ? null
+      : await maybeGetPresignedUrl({
+          bucketId,
+          key,
+          download,
+          filename: filename || key.split("/").pop() || "download",
+          bucketNameOverride: bucketName || undefined,
+        });
 
     if (presigned) return NextResponse.json({ url: presigned });
 

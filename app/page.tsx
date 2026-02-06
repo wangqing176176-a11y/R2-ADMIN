@@ -146,6 +146,8 @@ type S3BucketNameCheck = {
   checkedAt: number;
 };
 type S3BucketNameCheckMap = Record<string, S3BucketNameCheck>;
+type TransferModeOverride = "auto" | "presigned" | "proxy";
+type TransferModeOverrideMap = Record<string, TransferModeOverride>;
 type PreviewState =
   | null
   | {
@@ -290,6 +292,7 @@ export default function R2Admin() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [linkConfigMap, setLinkConfigMap] = useState<LinkConfigMap>({});
   const [s3BucketNameCheckMap, setS3BucketNameCheckMap] = useState<S3BucketNameCheckMap>({});
+  const [transferModeOverrideMap, setTransferModeOverrideMap] = useState<TransferModeOverrideMap>({});
 
   const [toast, setToast] = useState<ToastState>(null);
   const toastPayload = useMemo(() => normalizeToast(toast), [toast]);
@@ -370,6 +373,15 @@ export default function R2Admin() {
         setS3BucketNameCheckMap(JSON.parse(storedChecks));
       } catch {
         localStorage.removeItem("r2_s3_bucket_check_v1");
+      }
+    }
+
+    const storedModeOverrides = localStorage.getItem("r2_transfer_mode_override_v1");
+    if (storedModeOverrides) {
+      try {
+        setTransferModeOverrideMap(JSON.parse(storedModeOverrides));
+      } catch {
+        localStorage.removeItem("r2_transfer_mode_override_v1");
       }
     }
   }, []);
@@ -763,6 +775,18 @@ export default function R2Admin() {
     });
   };
 
+  const setTransferModeOverride = (bucketId: string, mode: TransferModeOverride) => {
+    setTransferModeOverrideMap((prev) => {
+      const next = { ...prev, [bucketId]: mode };
+      localStorage.setItem("r2_transfer_mode_override_v1", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const getTransferModeOverride = (bucketId: string) => {
+    return (transferModeOverrideMap[bucketId] ?? "auto") as TransferModeOverride;
+  };
+
   const getLinkConfig = (bucketName: string | null): LinkConfig => {
     if (!bucketName) return {};
     return linkConfigMap[bucketName] ?? {};
@@ -1130,6 +1154,8 @@ export default function R2Admin() {
     qs.set("bucket", bucket);
     qs.set("key", key);
     if (filename) qs.set("filename", filename);
+    const overrideMode = getTransferModeOverride(bucket);
+    if (overrideMode === "proxy") qs.set("forceProxy", "1");
     const bucketNameOverride = getS3BucketNameOverride(bucket);
     if (bucketNameOverride) qs.set("bucketName", bucketNameOverride);
     const res = await fetchWithAuth(`/api/download?${qs.toString()}`);
@@ -1140,9 +1166,11 @@ export default function R2Admin() {
 
   const getSignedDownloadUrlForced = async (bucket: string, key: string, filename: string) => {
     const bucketNameOverride = getS3BucketNameOverride(bucket);
-    const extra = bucketNameOverride ? `&bucketName=${encodeURIComponent(bucketNameOverride)}` : "";
+    const overrideMode = getTransferModeOverride(bucket);
+    const extraBucket = bucketNameOverride ? `&bucketName=${encodeURIComponent(bucketNameOverride)}` : "";
+    const extraMode = overrideMode === "proxy" ? "&forceProxy=1" : "";
     const res = await fetchWithAuth(
-      `/api/download?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}&download=1&filename=${encodeURIComponent(filename)}${extra}`,
+      `/api/download?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}&download=1&filename=${encodeURIComponent(filename)}${extraBucket}${extraMode}`,
     );
     const data = await res.json();
     if (!res.ok || !data.url) throw new Error(data.error || "download url failed");
@@ -2051,61 +2079,84 @@ export default function R2Admin() {
                   : "bg-red-50 text-red-700 border-red-100 dark:bg-red-950/40 dark:text-red-200 dark:border-red-900"
           }`}
         >
-          <div className="flex items-center gap-2">
-            <Wifi className="w-3 h-3" />
-            <span className="font-medium">
-              {connectionStatus === "connected"
-                ? "连接状态正常"
-                : connectionStatus === "checking"
-                  ? "连接中..."
-                  : connectionStatus === "unbound"
+	          <div className="flex items-center gap-2">
+	            <Wifi className="w-3 h-3" />
+	            <span className="font-semibold">
+	              {connectionStatus === "connected"
+	                ? "连接状态正常"
+	                : connectionStatus === "checking"
+	                  ? "连接中..."
+	                  : connectionStatus === "unbound"
                     ? "未绑定存储桶"
                     : "连接异常"}
             </span>
 	          </div>
-	          {connectionStatus === "connected"
-	            ? (() => {
-	                const mode = selectedBucket ? buckets.find((b) => b.id === selectedBucket)?.transferMode : undefined;
-	                const cfg = selectedBucket ? getLinkConfig(selectedBucket) : undefined;
-	                const s3BucketName = String(cfg?.s3BucketName ?? "").trim();
-	                const s3Check = selectedBucket ? getS3BucketNameCheck(selectedBucket) : null;
+		          {connectionStatus === "connected"
+		            ? (() => {
+		                const mode = selectedBucket ? buckets.find((b) => b.id === selectedBucket)?.transferMode : undefined;
+		                const cfg = selectedBucket ? getLinkConfig(selectedBucket) : undefined;
+		                const s3BucketName = String(cfg?.s3BucketName ?? "").trim();
+		                const s3Check = selectedBucket ? getS3BucketNameCheck(selectedBucket) : null;
+                    const overrideMode = selectedBucket ? getTransferModeOverride(selectedBucket) : "auto";
 
-	                let line2 = "当前传输通道：未检测";
-	                let line3: string | null = null;
+		                let line2 = "当前传输通道：未检测";
+		                let line3: string | null = null;
+                    const suffix = overrideMode === "auto" ? "" : "（手动）";
 
-	                if (mode === "presigned") {
-	                  line2 = "当前传输通道：R2 直连";
-	                  if (s3BucketName) {
-	                    if (!s3Check) line3 = `桶名未校验：${s3BucketName}`;
-	                    else if (s3Check.ok) line3 = "桶名校验通过";
-	                    else line3 = `桶名校验失败：${s3BucketName}，${s3Check.hint || "请检查桶名"}（已忽略此桶名设置）`;
-	                  }
-	                } else if (mode === "presigned_needs_bucket_name") {
-	                  if (!s3BucketName) {
-	                    line2 = "当前传输通道：Pages 代理";
-	                    line3 = "已配置 R2 直连，如需启动 R2 直连，需在「链接设置」填写桶名后才会生效";
-	                  } else if (!s3Check) {
-	                    line2 = "当前传输通道：R2 直连";
-	                    line3 = `桶名未校验：${s3BucketName}`;
-	                  } else if (s3Check.ok) {
-	                    line2 = "当前传输通道：R2 直连";
-	                    line3 = "桶名校验通过";
-	                  } else {
-	                    line2 = "当前传输通道：Pages 代理";
-	                    line3 = `桶名校验失败：${s3BucketName}${s3Check.hint || "请检查桶名"}，无法启用「R2 直连」，已回退至「Pages 代理」`;
-	                  }
-	                } else if (mode === "proxy") {
-	                  line2 = "当前传输通道：Pages 代理";
-	                }
+		                if (mode === "presigned") {
+		                  line2 = overrideMode === "proxy" ? `当前传输通道：Pages 代理${suffix}` : `当前传输通道：R2 直连${suffix}`;
+		                  if (s3BucketName) {
+		                    if (!s3Check) line3 = `桶名未校验：${s3BucketName}`;
+		                    else if (s3Check.ok) line3 = "桶名校验通过";
+		                    else line3 = `桶名校验失败：${s3BucketName}，${s3Check.hint || "请检查桶名"}（已忽略此桶名设置）`;
+		                  }
+		                } else if (mode === "presigned_needs_bucket_name") {
+		                  if (!s3BucketName) {
+		                    line2 = overrideMode === "presigned" ? `当前传输通道：Pages 代理${suffix}` : `当前传输通道：Pages 代理${suffix}`;
+		                    line3 = "已配置 R2 直连，如需启动 R2 直连，需在「链接设置」填写桶名后才会生效";
+		                  } else if (!s3Check) {
+		                    line2 = overrideMode === "proxy" ? `当前传输通道：Pages 代理${suffix}` : `当前传输通道：R2 直连${suffix}`;
+		                    line3 = `桶名未校验：${s3BucketName}`;
+		                  } else if (s3Check.ok) {
+		                    line2 = overrideMode === "proxy" ? `当前传输通道：Pages 代理${suffix}` : `当前传输通道：R2 直连${suffix}`;
+		                    line3 = "桶名校验通过";
+		                  } else {
+		                    line2 = `当前传输通道：Pages 代理${suffix}`;
+		                    line3 = `桶名校验失败：${s3BucketName}${s3Check.hint || "请检查桶名"}，无法启用「R2 直连」，已回退至「Pages 代理」`;
+		                  }
+		                } else if (mode === "proxy") {
+		                  line2 = `当前传输通道：Pages 代理${suffix}`;
+		                }
 
-	                return (
-	                  <>
-	                    <div className="mt-1 text-[10px] leading-relaxed opacity-80">{line2}</div>
-	                    {line3 ? <div className="mt-1 text-[10px] leading-relaxed opacity-80">{line3}</div> : null}
-	                  </>
-	                );
-	              })()
-	            : null}
+		                return (
+		                  <>
+                        <div className="mt-1 flex items-center justify-between gap-2">
+                          <div className="min-w-0 text-[11px] font-semibold leading-relaxed opacity-90 truncate">{line2}</div>
+                          {selectedBucket ? (
+                            <select
+                              value={overrideMode}
+                              onChange={(e) => {
+                                const v = (e.target.value || "auto") as TransferModeOverride;
+                                setTransferModeOverride(selectedBucket, v);
+                                setToast(v === "auto" ? "已切换传输模式（自动）" : v === "presigned" ? "已切换传输模式（R2 直连）" : "已切换传输模式（Pages 代理）");
+                              }}
+                              className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100"
+                              aria-label="切换传输模式"
+                              title="传输模式"
+                            >
+                              <option value="auto">自动</option>
+                              <option value="presigned" disabled={mode === "proxy"}>
+                                R2 直连
+                              </option>
+                              <option value="proxy">Pages 代理</option>
+                            </select>
+                          ) : null}
+                        </div>
+		                    {line3 ? <div className="mt-1 text-[10px] leading-relaxed opacity-80">{line3}</div> : null}
+		                  </>
+		                );
+		              })()
+		            : null}
 
           {connectionDetail ? (
             <div className="mt-1 text-[10px] leading-relaxed opacity-80">{connectionDetail}</div>
