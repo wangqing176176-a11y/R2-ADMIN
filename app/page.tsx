@@ -2092,7 +2092,7 @@ export default function R2Admin() {
 	                    line3 = "桶名校验通过";
 	                  } else {
 	                    line2 = "当前传输通道：Pages 代理";
-	                    line3 = `桶名校验失败：${s3BucketName}，${s3Check.hint || "请检查桶名"}，无法启用「R2 直连」，已回退至「Pages 代理」`;
+	                    line3 = `桶名校验失败：${s3BucketName}${s3Check.hint || "请检查桶名"}，无法启用「R2 直连」，已回退至「Pages 代理」`;
 	                  }
 	                } else if (mode === "proxy") {
 	                  line2 = "当前传输通道：Pages 代理";
