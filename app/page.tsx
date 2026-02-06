@@ -2062,28 +2062,50 @@ export default function R2Admin() {
                     ? "未绑定存储桶"
                     : "连接异常"}
             </span>
-          </div>
-          {connectionStatus === "connected" ? (
-            <div className="mt-1 text-[10px] leading-relaxed opacity-80">
-	              {(() => {
+	          </div>
+	          {connectionStatus === "connected"
+	            ? (() => {
 	                const mode = selectedBucket ? buckets.find((b) => b.id === selectedBucket)?.transferMode : undefined;
 	                const cfg = selectedBucket ? getLinkConfig(selectedBucket) : undefined;
-                  const s3BucketName = String(cfg?.s3BucketName ?? "").trim();
-                  const s3Check = selectedBucket ? getS3BucketNameCheck(selectedBucket) : null;
-	                if (mode === "presigned") return "当前传输通道：R2 直连";
-                  if (mode === "presigned_needs_bucket_name") {
-                    if (s3BucketName) {
-                      if (!s3Check) return `当前传输通道：R2 直连（桶名未校验：${s3BucketName}）`;
-                      if (s3Check.ok) return "当前传输通道：R2 直连（桶名校验通过）";
-                      return `当前传输通道：R2 直连（桶名校验失败：${s3BucketName}，${s3Check.hint || "请检查桶名"}，已回退至「Pages 代理」通道）`;
-                    }
-                    return "当前传输通道：Pages 代理。已配置 R2 直连，如需启动 R2 直连，需在「链接设置」填写桶名后才会生效";
-                  }
-	                if (mode === "proxy") return "当前传输通道：Pages 代理";
-	                return "当前传输通道：未检测";
-	              })()}
-	            </div>
-	          ) : null}
+	                const s3BucketName = String(cfg?.s3BucketName ?? "").trim();
+	                const s3Check = selectedBucket ? getS3BucketNameCheck(selectedBucket) : null;
+
+	                let line2 = "当前传输通道：未检测";
+	                let line3: string | null = null;
+
+	                if (mode === "presigned") {
+	                  line2 = "当前传输通道：R2 直连";
+	                  if (s3BucketName) {
+	                    if (!s3Check) line3 = `桶名未校验：${s3BucketName}`;
+	                    else if (s3Check.ok) line3 = "桶名校验通过";
+	                    else line3 = `桶名校验失败：${s3BucketName}，${s3Check.hint || "请检查桶名"}（已忽略此桶名设置）`;
+	                  }
+	                } else if (mode === "presigned_needs_bucket_name") {
+	                  if (!s3BucketName) {
+	                    line2 = "当前传输通道：Pages 代理";
+	                    line3 = "已配置 R2 直连，如需启动 R2 直连，需在「链接设置」填写桶名后才会生效";
+	                  } else if (!s3Check) {
+	                    line2 = "当前传输通道：R2 直连";
+	                    line3 = `桶名未校验：${s3BucketName}`;
+	                  } else if (s3Check.ok) {
+	                    line2 = "当前传输通道：R2 直连";
+	                    line3 = "桶名校验通过";
+	                  } else {
+	                    line2 = "当前传输通道：Pages 代理";
+	                    line3 = `桶名校验失败：${s3BucketName}，${s3Check.hint || "请检查桶名"}，已回退至「Pages 代理」通道`;
+	                  }
+	                } else if (mode === "proxy") {
+	                  line2 = "当前传输通道：Pages 代理";
+	                }
+
+	                return (
+	                  <>
+	                    <div className="mt-1 text-[10px] leading-relaxed opacity-80">{line2}</div>
+	                    {line3 ? <div className="mt-1 text-[10px] leading-relaxed opacity-80">{line3}</div> : null}
+	                  </>
+	                );
+	              })()
+	            : null}
 
           {connectionDetail ? (
             <div className="mt-1 text-[10px] leading-relaxed opacity-80">{connectionDetail}</div>
