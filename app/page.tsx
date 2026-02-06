@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import Modal from "@/components/Modal";
 import { 
   Folder, Trash2, Upload, RefreshCw, 
-  Wifi, ChevronRight, Search,
+  ChevronRight, Search,
   Menu, Sun, Moon, Monitor, ChevronDown,
   FileText, Image as ImageIcon, Music, Video, Edit2,
   FileArchive, FileCode, FileSpreadsheet, FileType, FileJson,
@@ -69,30 +69,20 @@ const BrandMark = ({ className }: { className?: string }) => {
 
 const WifiMark = ({ className }: { className?: string }) => {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className={className}
+    <span
+      className={["inline-block bg-current", className].filter(Boolean).join(" ")}
       aria-hidden="true"
-      focusable="false"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M9.5 14.5 Q12 12.2 14.5 14.5"
-        stroke="currentColor"
-        strokeWidth="2.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M6.5 11.5 Q12 6.8 17.5 11.5"
-        stroke="currentColor"
-        strokeWidth="2.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle cx="12" cy="18" r="1.6" fill="currentColor" />
-    </svg>
+      style={{
+        WebkitMaskImage: "url(/Wi-Fi.svg)",
+        maskImage: "url(/Wi-Fi.svg)",
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+      }}
+    />
   );
 };
 
