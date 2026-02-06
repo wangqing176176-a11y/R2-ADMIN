@@ -2126,28 +2126,28 @@ export default function R2Admin() {
 		                let line3: string | null = null;
                     const suffix = overrideMode === "auto" ? "" : "（手动）";
 
-		                if (mode === "presigned") {
-		                  line2 = overrideMode === "proxy" ? `当前传输通道：Pages 代理${suffix}` : `当前传输通道：R2 直连${suffix}`;
-		                  if (s3BucketName) {
-		                    if (!s3Check) line3 = `桶名未校验：${s3BucketName}`;
-		                    else if (s3Check.ok) line3 = "桶名校验通过";
-		                    else line3 = `桶名校验失败：${s3BucketName}，${s3Check.hint || "请检查桶名"}（已忽略此桶名设置）`;
-		                  }
-		                } else if (mode === "presigned_needs_bucket_name") {
+			                if (mode === "presigned") {
+			                  line2 = overrideMode === "proxy" ? `当前传输通道：Pages 代理${suffix}` : `当前传输通道：R2 直连${suffix}`;
+			                  if (s3BucketName) {
+			                    if (!s3Check) line3 = `桶名未校验：${s3BucketName}`;
+			                    else if (s3Check.ok) line3 = null;
+			                    else line3 = `桶名校验失败：${s3BucketName}，${s3Check.hint || "请检查桶名"}（已忽略此桶名设置）`;
+			                  }
+			                } else if (mode === "presigned_needs_bucket_name") {
 		                  if (!s3BucketName) {
 		                    line2 = overrideMode === "presigned" ? `当前传输通道：Pages 代理${suffix}` : `当前传输通道：Pages 代理${suffix}`;
 		                    line3 = "已配置 R2 直连，如需启动 R2 直连，需在「链接设置」填写桶名后才会生效";
 		                  } else if (!s3Check) {
 		                    line2 = overrideMode === "proxy" ? `当前传输通道：Pages 代理${suffix}` : `当前传输通道：R2 直连${suffix}`;
 		                    line3 = `桶名未校验：${s3BucketName}`;
-		                  } else if (s3Check.ok) {
-		                    line2 = overrideMode === "proxy" ? `当前传输通道：Pages 代理${suffix}` : `当前传输通道：R2 直连${suffix}`;
-		                    line3 = "桶名校验通过";
-		                  } else {
-		                    line2 = `当前传输通道：Pages 代理${suffix}`;
-		                    line3 = `桶名校验失败：${s3BucketName}${s3Check.hint || "请检查桶名"}，无法启用「R2 直连」，已回退至「Pages 代理」`;
-		                  }
-		                } else if (mode === "proxy") {
+			                  } else if (s3Check.ok) {
+			                    line2 = overrideMode === "proxy" ? `当前传输通道：Pages 代理${suffix}` : `当前传输通道：R2 直连${suffix}`;
+			                    line3 = null;
+			                  } else {
+			                    line2 = `当前传输通道：Pages 代理${suffix}`;
+			                    line3 = `桶名校验失败：${s3BucketName}${s3Check.hint || "请检查桶名"}，无法启用「R2 直连」，已回退至「Pages 代理」`;
+			                  }
+			                } else if (mode === "proxy") {
 		                  line2 = `当前传输通道：Pages 代理${suffix}`;
 		                }
 
@@ -2173,18 +2173,18 @@ export default function R2Admin() {
                     const current = getTransferModeOverride(selectedBucket);
                     const canUsePresigned = buckets.find((b) => b.id === selectedBucket)?.transferMode !== "proxy";
                     const label = current === "auto" ? "自动" : current === "presigned" ? "R2 直连" : "Pages 代理";
-                    return isMobile ? (
-                      <select
-                        value={current}
-                        onChange={(e) => {
-                          const v = (e.target.value || "auto") as TransferModeOverride;
+	                    return isMobile ? (
+	                      <select
+	                        value={current}
+	                        onChange={(e) => {
+	                          const v = (e.target.value || "auto") as TransferModeOverride;
                           setTransferModeOverride(selectedBucket, v);
                           setToast(v === "auto" ? "已切换传输模式（自动）" : v === "presigned" ? "已切换传输模式（R2 直连）" : "已切换传输模式（Pages 代理）");
                         }}
-                        className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100"
-                        aria-label="切换传输模式"
-                        title="选择传输通道"
-                      >
+	                        className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[12px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100"
+	                        aria-label="切换传输模式"
+	                        title="选择传输通道"
+	                      >
                         <option value="auto">自动</option>
                         <option value="presigned" disabled={!canUsePresigned}>
                           R2 直连
@@ -2192,15 +2192,15 @@ export default function R2Admin() {
                         <option value="proxy">Pages 代理</option>
                       </select>
                     ) : (
-                      <div ref={transferModeMenuRef} className="relative">
-                        <button
-                          type="button"
-                          onClick={() => setTransferModeMenuOpen((v) => !v)}
-                          className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100"
-                          aria-haspopup="listbox"
-                          aria-expanded={transferModeMenuOpen}
-                          title="选择传输通道"
-                        >
+	                      <div ref={transferModeMenuRef} className="relative">
+	                        <button
+	                          type="button"
+	                          onClick={() => setTransferModeMenuOpen((v) => !v)}
+	                          className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100"
+	                          aria-haspopup="listbox"
+	                          aria-expanded={transferModeMenuOpen}
+	                          title="选择传输通道"
+	                        >
                           <span className="leading-none">{label}</span>
                           <ChevronDown className={`w-3.5 h-3.5 opacity-70 transition-transform ${transferModeMenuOpen ? "rotate-180" : ""}`} />
                         </button>
@@ -2229,14 +2229,14 @@ export default function R2Admin() {
                                           ? "已切换传输模式（R2 直连）"
                                           : "已切换传输模式（Pages 代理）",
                                     );
-                                  }}
-                                  className={[
-                                    "w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-[11px] transition-colors",
-                                    opt.value === current
-                                      ? "bg-blue-50 text-blue-700 font-medium dark:bg-blue-950/40 dark:text-blue-200"
-                                      : "text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800",
-                                    opt.disabled ? "opacity-50 cursor-not-allowed hover:bg-transparent dark:hover:bg-transparent" : "",
-                                  ]
+	                                  }}
+	                                  className={[
+	                                    "w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-[12px] transition-colors",
+	                                    opt.value === current
+	                                      ? "bg-blue-50 text-blue-700 font-medium dark:bg-blue-950/40 dark:text-blue-200"
+	                                      : "text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800",
+	                                    opt.disabled ? "opacity-50 cursor-not-allowed hover:bg-transparent dark:hover:bg-transparent" : "",
+	                                  ]
                                     .filter(Boolean)
                                     .join(" ")}
                                   role="option"
