@@ -1,210 +1,94 @@
-# Qing's R2 Admin
+# **R2 Admin 部署教程**
 
-一个部署在 **Cloudflare Pages** 上的 **Cloudflare R2 管理面板**：不需要自建服务器，使用 Pages Functions + R2 绑定实现桶内文件的查看、上传、预览、下载与批量操作。
 
-> 推荐用法：每个人 fork 本仓库 → 部署到自己的 Cloudflare Pages → 绑定自己的 R2 桶，即可管理自己的文件。
 
----
+## **简介**
 
-## 功能
+一个部署在 **Cloudflare Pages** 上的 **Cloudflare R2 文件管理面板**，弥补了官方文件管理面板的文件操作限制和文件上传限制；
 
-- 多桶切换（Pages 绑定多个 R2 存储桶）
-- 文件与文件夹浏览（支持“空文件夹”）
-- 大文件分片上传（multipart），支持**暂停 / 继续续传 / 取消**
-- 预览：图片 / 音频 / 视频（Range）/ PDF / Office 在线预览
-- 文件操作：下载 / 重命名 / 移动
-- 批量：下载、移动（按勾选）
-- 全局搜索（当前桶内扫描匹配）
-- 可选访问密码：设置 `ADMIN_PASSWORD` 后启用登录页与 API 鉴权
+不需要自建服务器和域名，如果追求速度体验可以绑定自己的二级域名，使用 Cloudflare Pages + R2 绑定实现桶内文件的 查看、大文件上传、预览、下载与批量对文件功能性的操作。
 
----
 
-## 部署到 Cloudflare Pages（推荐）
 
-### 1) Fork 仓库并创建 Pages 项目
+## **功能**
 
-在 Cloudflare Dashboard：
-1. Pages → 创建项目 → 连接 GitHub 仓库
-2. 选择本仓库（或你的 fork）
+- 多个存储桶切换（Pages 需要设置绑定多个 R2 存储桶）
+- 文件与文件夹列表模式浏览
+- 大文件分片上传，突破官方网站 300M 的上限限制，支持 暂停 / 继续续传 / 取消
+- 在线预览：暂时支持 图片 / 音频 / 视频 / PDF / 代码 / Office 在线预览
+- 文件操作：上传 / 下载 / 重命名 / 移动 / 复制 / 删除 / 新建文件夹 / 复制自定义链接 / 复制公共链接
+- 支持文件和文件夹多选并进行批量操作
+- 全局搜索（当前桶内扫描匹配）支持搜索后缀名
+- 可选访问密码：设置 `ADMIN_PASSWORD` 变量后启用登录页与 API 鉴权
+- 配置 R2 直连后可切换三种传输模式（自动、R2 直连、Pages 代理）
+- 可查看当前账号和当前存储桶的存储空间使用数据
+- 管理面板界面主题切换：跟随系统、浅色模式、深色模式
 
-### 2) 构建配置
 
+
+## **部署到 Cloudflare Pages**
+
+### 第一步：创建 Cloudflare Pages 项目
+
+**登陆 Cloudflare 仪表盘：**计算和AI → Workers 和 Pages → 创建应用程序 → Pages → 拖放文件 → 创建名称并选择本项目文件夹。
+
+### 第二步：构建配置
+
+- 框架预设：`Next.js`
 - 构建命令：`npx @cloudflare/next-on-pages@1`
 - 构建输出目录：`.vercel/output/static`
+- 兼容性标志：添加 `nodejs_compat`（生产 / 预览）
 
-### 3) Functions 兼容性标志
+**上述步骤全部操作完成后部署即可；然后接着下面的步骤操作。**
 
-Pages → 设置 → 函数 → 兼容性标志：
-- 添加：`nodejs_compat`（建议生产/预览都加）
+### 第三步：绑定 R2 存储桶
 
-### 4) 绑定 R2 存储桶（核心）
+**Workers 和 Pages → 设置 →  绑定 → 添加：**
 
-Pages → 设置 → 函数 → 绑定 → 添加：
 - 类型：R2 存储桶
-- 绑定名称：建议英文且以 `R2_` 开头（例如 `R2_BLOG`、`R2_CLOUD`）
-- 选择你的 R2 桶
+- 名称：建议英文且以 `R2_` 开头（例如 `R2_BLOG`、`R2_CLOUD`）
+- 选择你的 R2 存储桶
 
-绑定完成后重新部署一次，页面就会显示桶列表并可操作文件。
+**如果需要管理多个存储桶文件，那就绑定多个，绑定完成后重新部署一次，页面就会显示桶列表并可操作文件。**
 
----
+### 第四步：设置账号和密码（非必须但建议）
 
-## 环境变量（可选）
+**Workers 和 Pages → 设置 → 变量和机密 → 添加：**
 
-### 启用「直连 R2」下载/预览（S3 预签名 / 推荐）
+| 类型 | 名称（必须）     | 值（示例）     | 说明 |
+| ---- | ---------------- | :------------- | ---- |
+| 文本 | `ADMIN_USERNAME` | wangqing       | 账号 |
+| 密钥 | `ADMIN_PASSWORD` | wangqing123456 | 密码 |
+
+设置完成保存，并重新部署成功后，再次打开网站会弹出**「管理员登陆」**界面。
+
+
+
+## **启用 R2 直连模式（非必须但建议）**
 
 默认情况下，本项目会通过 Pages Functions + R2 Binding（/api/object）代理文件流。
-如果你希望预览/下载更快、更稳定，并且浏览器能显示下载总大小，推荐启用 **S3 预签名直连**：
-站点只负责签发临时 URL，文件字节由浏览器直接从 R2 拉取。
+如果你希望 预览 / 上传 / 下载 速度更快、更稳定，并且浏览器能显示下载总大小，推荐启用 **S3 预签名直连**：
 
-需要在 Pages → Settings → Environment variables 配置：
+**需要在 Pages → 设置 → 变量和机密 → 添加：**
 
-| 变量名 | 类型建议 | 说明 |
-|---|---|---|
-| `R2_ACCOUNT_ID` | Text | Cloudflare Account ID（R2 S3 endpoint 需要） |
-| `R2_ACCESS_KEY_ID` | Secret/Text | R2 Access Key ID |
-| `R2_SECRET_ACCESS_KEY` | Secret | R2 Secret Access Key |
+| 变量名                 | 类型 | 说明         |
+| ---------------------- | ---- | ------------ |
+| `R2_ACCOUNT_ID`        | 文本 | 账户 ID      |
+| `R2_ACCESS_KEY_ID`     | 密钥 | 访问密钥 ID  |
+| `R2_SECRET_ACCESS_KEY` | 密钥 | 机密访问密钥 |
 
-并提供 **binding 名 → 真实 R2 bucket 名** 的映射（三种方式任选其一）：
+注意：配置完成以上信息后，重新部署，打开网站，在页面左侧底部的「链接设置」里，为每个绑定填写一次 **R2 桶名**（真实的存储桶名称）即可开启 R2 直连模式。配置齐全后，`/api/download` 会优先返回 presigned URL；未配置则自动回退到 Pages 代理模式。通过「链接设置」填写桶名时，系统会自动做一次桶名校验；校验失败会提示原因，并在预览/下载时自动回退到 Pages 代理。
 
-- 简单模式：直接把 `R2_BUCKETS` 的 value 写成真实 bucket 名（例如 `R2_BLOG:my-blog,R2_CLOUD:qing-cloud`）。
-  - 好处：不需要额外变量；无需在 UI 额外填写；桶列表默认仍显示 Pages 的绑定名（例如 `R2_BLOG`）。
-- 自定义显示名：`R2_BUCKETS` 用于显示名/顺序（例如 `R2_BLOG:博客,R2_CLOUD:云盘`），同时新增 `R2_BUCKET_NAMES` 用于真实 bucket 名（例如 `R2_BLOG:my-blog,R2_CLOUD:qing-cloud`）。
+**你可以在页面左侧「连接状态正常」卡片里看到当前传输通道提示：**
 
-- 无需新增环境变量：在页面左侧底部的「链接设置」里，为每个绑定填写一次 **S3 桶名**（真实 bucket 名）。
-
-说明：配置齐全后，`/api/download` 会优先返回 presigned URL；未配置则自动回退到代理模式。通过「链接设置」填写桶名时，系统会自动做一次桶名校验；校验失败会提示原因，并在预览/下载时自动回退到 Pages 代理。
-
-你可以在页面左侧「连接状态正常」卡片里看到当前传输通道提示（分行展示）：
-- `当前传输通道：R2 直连`：预览/下载会走 R2 直连（`*.r2.cloudflarestorage.com` + `X-Amz-*`）
+- `当前传输通道：R2 直连`：预览/下载会走 R2 直连
 - `当前传输通道：Pages 代理`：预览/下载会走 Pages 代理（`/api/object`）
 - 当需要提示原因时，会额外显示第三行，例如：`桶名未校验：xxx` / `桶名校验失败：xxx...已回退至「Pages 代理」`
 
-并且你可以在其下方的「选择传输通道」里手动切换（按桶保存）：
+**并且你可以在其下方的「选择传输通道」里手动切换（按桶保存）：**
+
 - `自动`（默认）：满足直连条件时用 R2 直连，否则回退 Pages 代理
 - `R2 直连`：优先尝试直连（桶名校验失败仍会回退 Pages 代理）
 - `Pages 代理`：强制走 Pages 代理
 
-> 备注：文件列表/重命名/移动/上传等“管理操作”始终通过 Pages Functions + R2 Binding 完成；“直连”只影响预览/下载这类大流量的数据传输。
-
-> 获取 Access Key：Cloudflare Dashboard → R2 → Manage R2 API Tokens / S3 API（创建 Access Key）。
-
-其他可选环境变量（建议用“密钥”保存敏感值）：
-
-### `ADMIN_PASSWORD`（密钥 / 推荐）
-
-开启访问登录与接口鉴权。
-
-- 未设置：打开站点直接进入（任何人都能操作你绑定的桶）
-- 已设置：打开站点先出现“访问登录”页，输入密码后才能进入管理
-
-### `ADMIN_USERNAME`（文本 / 可选）
-
-开启“账号 + 密码”双校验。
-
-- 未设置：仅校验 `ADMIN_PASSWORD`（页面“管理账号”输入框不参与鉴权）
-- 已设置：同时校验账号与密码（账号必须等于 `ADMIN_USERNAME`）
-
-### `R2_BUCKETS`（文本 / 可选）
-
-用于限制/排序桶列表（也可避免误识别）。桶的显示名称默认使用 Pages 的绑定名（例如 `R2_BLOG`）。
-
-> 如果你启用了上面的 S3 预签名直连但没有配置 `R2_BUCKET_NAMES`，则需要通过以下任意方式提供真实 bucket 名：
-> 1) 直接把 `R2_BUCKETS` 的 value 写成真实 bucket 名；或
-> 2) 配置 `R2_BUCKET_NAMES`；或
-> 3) 在页面「链接设置」里填写 S3 桶名。
-
-支持两种格式：
-- CSV：`R2_BLOG:博客,R2_CLOUD:云盘`
-- JSON：`{"R2_BLOG":"博客","R2_CLOUD":"云盘"}`
-
-### `R2_BUCKET_NAMES`（文本 / 可选）
-
-用于提供 **binding 名 → 真实 R2 bucket 名** 的映射（主要给 S3 预签名直连使用），从而让你可以把 `R2_BUCKETS` 单纯用于“显示名/排序”。
-
-格式支持 CSV 或 JSON，例如：
-- CSV：`R2_BLOG:my-blog,R2_CLOUD:qing-cloud`
-- JSON：`{"R2_BLOG":"my-blog","R2_CLOUD":"qing-cloud"}`
-
-### `ADMIN_TOKEN_SECRET`（密钥 / 高级）
-
-用于签发预览/下载/上传的短期 token（不想依赖 `ADMIN_PASSWORD` 时可单独设置）。
-
----
-
-## 本地开发
-
-```bash
-npm install
-npm run dev
-```
-
-打开 `http://localhost:3000`。
-
-> 本项目的核心能力来自 Cloudflare Pages 的 R2 绑定；本地开发时如果没有对应环境，部分功能需要在 Pages 环境验证。
-
----
-
-## 安全说明（重要）
-
-- 本项目基于 **Pages 绑定桶** 管理文件：谁部署、谁绑定、谁就拥有对绑定桶的读写权限。
-- 强烈建议设置 `ADMIN_PASSWORD`（并使用“密钥”类型保存）。
-- 勾选“在本地记住密码”会把密码存到浏览器 localStorage；公用电脑不要勾选，用完点击“退出登录”。
-
----
-
-## 已知限制 / 说明
-
-- “全局搜索”通过扫描 `list` 结果匹配，桶很大时可能较慢。
-- 文件夹移动/复制在 R2 侧没有原生“目录”概念，内部实现为遍历 key 并逐个拷贝/删除。
-
----
-
-# Qing's R2 Admin (English)
-
-A Cloudflare Pages + R2 bindings based admin panel. No custom server required. Fork → deploy to your own Pages → bind your R2 buckets → manage your files.
-
-## Quick Deploy (Cloudflare Pages)
-
-- Build command: `npx @cloudflare/next-on-pages@1`
-- Output directory: `.vercel/output/static`
-- Compatibility flags: `nodejs_compat`
-- Bindings: Pages → Settings → Functions → Bindings → R2 bucket (recommend binding names starting with `R2_`)
-
-## Optional Env Vars
-
-### Presigned Direct URLs (Recommended)
-
-By default, this project proxies file bytes via Pages Functions + R2 Binding (`/api/object`).
-For faster and more reliable preview/download (and to let browsers show the total size), enable **S3 presigned URLs**: the site only signs a temporary URL, and the browser downloads/streams directly from R2.
-
-Set these env vars in Cloudflare Pages:
-
-- `R2_ACCOUNT_ID`
-- `R2_ACCESS_KEY_ID`
-- `R2_SECRET_ACCESS_KEY`
-
-And provide a **binding-name → real bucket-name** mapping (choose one):
-
-- Simple: set `R2_BUCKETS` values to real bucket names (e.g. `R2_BLOG:my-blog,R2_CLOUD:qing-cloud`). The UI still shows binding names by default (e.g. `R2_BLOG`).
-- Custom display names: keep `R2_BUCKETS` for display/order, and set `R2_BUCKET_NAMES` to real bucket names.
-
-- No extra env vars: set the real **S3 bucket name** once per binding in the UI (bottom-left “链接设置”).
-
-When configured, `/api/download` returns a presigned URL first; otherwise it falls back to the proxied `/api/object` URL. If you provide the bucket name via the UI “Link settings”, the app will validate it once when saving; on failure it shows a hint and preview/download will fall back to Pages proxy automatically.
-
-You can also check the current transfer channel in the left “connection status” card:
-- `Current channel: R2 direct`: preview/download hits `*.r2.cloudflarestorage.com` with `X-Amz-*`
-- `Current channel: Pages proxy`: preview/download uses `/api/object`
-- When needed, it shows an extra line like: `Bucket name not checked: ...` / `Bucket check failed: ... fallback to Pages proxy`
-
-You can manually switch it per bucket in “选择传输通道”:
-- `Auto` (default): use direct when possible, otherwise proxy
-- `R2 direct`: prefer direct (still falls back on invalid bucket name)
-- `Pages proxy`: force proxy
-
-Note: listing/rename/move/upload always use Pages Functions + R2 bindings. “Direct” only affects preview/download.
-
-- `ADMIN_PASSWORD` (secret): enable login + API auth
-- `ADMIN_USERNAME` (text): require username + password (optional)
-- `R2_BUCKETS` (text): optional allowlist/order (CSV or JSON)
-- `ADMIN_TOKEN_SECRET` (secret): token signing secret for preview/download/upload URLs
+备注：文件列表/重命名/移动/上传等“管理操作”始终通过 Pages Functions + R2 Binding 完成；“R2 直连”只影响预览/下载这类大流量的数据传输。
